@@ -37,12 +37,25 @@ import { dashboardHtml } from './dashboard.ts';
 import { describePlatforms, isPlatformId } from '../platforms/index.ts';
 import { loadTemplates } from '../content/templates.ts';
 import { gate } from '../content/gate.ts';
+import { prepareContentBody } from '../content/prepare.ts';
+import { features, outreachBlockedMessage, engageBlockedMessage } from '../config/features.ts';
 import { generate, loadInstructions } from '../content/generate.ts';
 import { buildAiClient } from '../ai/client.ts';
 import {
   createContent, getContent, listContent, setContentState, recentPublishedBodies,
+  contentProvenance, markFounderApproved, reviseContent,
+  contentStageCounts, markContentPrepared,
   templateUsage, listJobs, createJob, setJobState, deleteJob, recentFeedActions,
 } from '../db/content.ts';
+import {
+  listPendingApprovals,
+  approvalToCard,
+  expireStaleApprovals,
+  ensureContentApproval,
+  decideApproval,
+} from '../guardrails/approvals.ts';
+import { searchAudit } from '../guardrails/audit.ts';
+import { loadAutonomy, saveAutonomy } from '../guardrails/autonomy.ts';
 
 type Handler = (
   body: Record<string, unknown>,
@@ -95,6 +108,9 @@ post('/api/campaign/status', (body) => {
   if (!getCampaign(id)) throw new HttpError(404, 'no such campaign');
   if (!['running', 'paused', 'draft', 'done'].includes(status)) {
     throw new HttpError(400, 'status must be running | paused | draft | done');
+  }
+  if (status === 'running' && !features.outreachEnabled) {
+    throw new HttpError(403, outreachBlockedMessage());
   }
   setCampaignStatus(id, status);
   return { id, status };
@@ -249,6 +265,497 @@ post('/api/content/draft', async (body) => {
 
 get('/api/content', (_b, q) => listContent(Number(q.get('limit') ?? 60)));
 
+get('/api/approvals', () => {
+  expireStaleApprovals();
+  return listPendingApprovals(60).map(approvalToCard);
+});
+
+post('/api/approvals/ensure-content', (body) => {
+  const row = ensureContentApproval(Number(body.contentId ?? body.id));
+  return approvalToCard(row);
+});
+
+post('/api/approvals/decide', async (body) => {
+  const decidedBy = String(body.decidedBy ?? 'dashboard');
+  if (decidedBy === 'voice' || decidedBy.startsWith('voice')) {
+    throw new HttpError(403, 'Voice cannot approve actions. Use the on-screen Approve button.');
+  }
+  const outcome = await decideApproval({
+    id: Number(body.id),
+    decision: String(body.decision) === 'rejected' ? 'rejected' : 'approved',
+    decidedBy,
+    editedPreview: body.preview != null ? String(body.preview) : null,
+    editedPayload: body.payload && typeof body.payload === 'object'
+      ? (body.payload as Record<string, unknown>)
+      : null,
+  });
+  return {
+    ...outcome,
+    approval: outcome.approval ? approvalToCard(outcome.approval) : null,
+  };
+});
+
+get('/api/audit', (_b, q) =>
+  searchAudit({
+    q: q.get('q') ?? undefined,
+    actionType: q.get('actionType') ?? undefined,
+    limit: Number(q.get('limit') ?? 50),
+  }),
+);
+
+get('/api/autonomy', () => loadAutonomy());
+post('/api/autonomy', (body) => {
+  const patch = (body.patch ?? body) as Record<string, 'auto' | 'approval_required' | 'blocked'>;
+  return saveAutonomy(patch);
+});
+
+get('/api/reply-style', async () => {
+  const { loadReplyStyle } = await import('../va/reply-style.ts');
+  return { style: loadReplyStyle() };
+});
+
+post('/api/reply-style', async (body) => {
+  const { saveReplyStyle, loadReplyStyle } = await import('../va/reply-style.ts');
+  if (body.style != null) saveReplyStyle(String(body.style));
+  return { style: loadReplyStyle() };
+});
+
+get('/api/context', async () => {
+  const { activeContext, contextLabel, listKnownContexts } = await import('../va/contexts.ts');
+  return {
+    active: activeContext(),
+    label: contextLabel(),
+    known: listKnownContexts(),
+  };
+});
+
+post('/api/context', async (body) => {
+  const { setActiveContext, contextLabel, listKnownContexts, rememberContext } = await import('../va/contexts.ts');
+  const id = setActiveContext(String(body.id ?? body.context ?? 'personal'));
+  rememberContext(id);
+  return { active: id, label: contextLabel(id), known: listKnownContexts() };
+});
+
+get('/api/onboarding', async () => {
+  const { getSetting } = await import('../db/index.ts');
+  return { done: Boolean(getSetting<boolean>('onboarding_done', false)) };
+});
+
+post('/api/onboarding', async (body) => {
+  const { getSetting, setSetting } = await import('../db/index.ts');
+  if (body.done === true || body.done === 'true') setSetting('onboarding_done', true);
+  if (body.done === false || body.reset === true) setSetting('onboarding_done', false);
+  return { done: Boolean(getSetting<boolean>('onboarding_done', false)) };
+});
+
+get('/api/chat/history', async (_b, q) => {
+  const { chatHistoryForUi } = await import('../va/memory.ts');
+  const { getActiveConversation } = await import('../va/conversations.ts');
+  const conv = getActiveConversation();
+  return {
+    conversation: conv,
+    messages: chatHistoryForUi(Number(q.get('limit') ?? 200)),
+  };
+});
+
+get('/api/conversations', async (_b, q) => {
+  const { listConversations, undoWindowMs } = await import('../va/conversations.ts');
+  return {
+    conversations: listConversations({
+      archived: q.get('archived') === '1',
+      q: q.get('q') ?? undefined,
+      limit: Number(q.get('limit') ?? 80),
+    }),
+    undoWindowMs: undoWindowMs(),
+  };
+});
+
+post('/api/conversations/new', async () => {
+  const { startNewConversation } = await import('../va/conversations.ts');
+  return startNewConversation();
+});
+
+post('/api/conversations/open', async (body) => {
+  const { setActiveConversation } = await import('../va/conversations.ts');
+  const id = Number(body.id);
+  if (!Number.isFinite(id)) throw new HttpError(400, 'id required');
+  return setActiveConversation(id);
+});
+
+post('/api/conversations/rename', async (body) => {
+  const { renameConversation } = await import('../va/conversations.ts');
+  const id = Number(body.id);
+  if (!Number.isFinite(id)) throw new HttpError(400, 'id required');
+  return renameConversation(id, String(body.title ?? ''));
+});
+
+post('/api/conversations/archive', async (body) => {
+  const { archiveConversation } = await import('../va/conversations.ts');
+  const id = Number(body.id);
+  if (!Number.isFinite(id)) throw new HttpError(400, 'id required');
+  return archiveConversation(id);
+});
+
+post('/api/conversations/unarchive', async (body) => {
+  const { unarchiveConversation } = await import('../va/conversations.ts');
+  const id = Number(body.id);
+  if (!Number.isFinite(id)) throw new HttpError(400, 'id required');
+  return unarchiveConversation(id);
+});
+
+post('/api/conversations/clear', async (body) => {
+  const {
+    clearConversation,
+    getActiveConversation,
+    pendingApprovalsInConversation,
+  } = await import('../va/conversations.ts');
+  const id = Number(body.id ?? getActiveConversation().id);
+  if (!Number.isFinite(id)) throw new HttpError(400, 'id required');
+  const pending = pendingApprovalsInConversation(id);
+  if (pending.length && !body.confirmPending) {
+    return {
+      needsConfirm: true,
+      pendingApprovals: pending,
+      warning:
+        `${pending.length} pending approval(s) stay in the Approvals tab. Clearing chat does not cancel them. Your activity log is kept separately for safety.`,
+    };
+  }
+  return clearConversation(id);
+});
+
+post('/api/conversations/delete', async (body) => {
+  const {
+    softDeleteConversation,
+    pendingApprovalsInConversation,
+  } = await import('../va/conversations.ts');
+  const { listPendingApprovals } = await import('../guardrails/approvals.ts');
+  const id = Number(body.id);
+  if (!Number.isFinite(id)) throw new HttpError(400, 'id required');
+  const pending = pendingApprovalsInConversation(id);
+  const allPending = listPendingApprovals(80);
+  const otherPendingCount = allPending.filter((a) => !pending.some((p) => p.id === a.id)).length;
+  if (pending.length && !body.confirmPending) {
+    return {
+      needsConfirm: true,
+      pendingApprovals: pending,
+      otherPendingCount,
+      warning:
+        `This chat references ${pending.length} pending approval(s). They will stay in Approvals (not cancelled or approved). Confirm to delete the chat only. Your activity log is kept separately for safety.`,
+    };
+  }
+  const result = softDeleteConversation(id);
+  return { ...result, otherPendingCount };
+});
+
+post('/api/conversations/delete-all', async (body) => {
+  const { deleteAllConversations } = await import('../va/conversations.ts');
+  return deleteAllConversations(String(body.confirm ?? ''));
+});
+
+post('/api/conversations/undo', async (body) => {
+  const { undo } = await import('../va/conversations.ts');
+  return undo(String(body.token ?? ''));
+});
+
+post('/api/conversations/export', async (body) => {
+  const { exportConversation } = await import('../va/conversations.ts');
+  const id = Number(body.id);
+  if (!Number.isFinite(id)) throw new HttpError(400, 'id required');
+  const format = body.format === 'json' ? 'json' : 'md';
+  return exportConversation(id, format);
+});
+
+post('/api/messages/delete', async (body) => {
+  const { deleteMessage } = await import('../va/conversations.ts');
+  const id = Number(body.id);
+  if (!Number.isFinite(id)) throw new HttpError(400, 'id required');
+  return deleteMessage(id);
+});
+
+get('/api/memory', async (_b, q) => {
+  const { recall } = await import('../va/memory.ts');
+  return recall({
+    scope: q.get('scope') ?? undefined,
+    contact: q.get('contact') ?? undefined,
+    limit: Number(q.get('limit') ?? 40),
+  });
+});
+
+post('/api/memory', async (body) => {
+  const { remember } = await import('../va/memory.ts');
+  return remember({
+    scope: (String(body.scope ?? 'fact') as 'preference' | 'contact' | 'task' | 'fact'),
+    key: String(body.key ?? 'note'),
+    value: String(body.value ?? ''),
+    contact: body.contact != null ? String(body.contact) : null,
+  });
+});
+
+post('/api/memory/forget', async (body) => {
+  const { forget } = await import('../va/memory.ts');
+  const id = Number(body.id);
+  if (!Number.isFinite(id)) throw new HttpError(400, 'id required');
+  return { ok: forget(id) };
+});
+
+post('/api/memory/forget-all', async (body) => {
+  const { forgetAllMemory } = await import('../va/memory.ts');
+  if (String(body.confirm ?? '') !== 'FORGET ALL') {
+    throw new HttpError(
+      400,
+      'Type FORGET ALL to confirm. This deletes preferences and contacts Funke stored. Chat, audit log, and approvals stay.',
+    );
+  }
+  return forgetAllMemory();
+});
+
+get('/api/kb', async (_b, q) => {
+  const { listKb, loadKnowledgeFiles } = await import('../va/knowledge.ts');
+  loadKnowledgeFiles();
+  return listKb(q.get('kind') ?? undefined, Number(q.get('limit') ?? 100));
+});
+
+get('/api/va/summary', async (_b, q) => {
+  const { buildDailySummary, lastDailySummary, maybeSendDailySummary } = await import('../va/summary.ts');
+  if (q.get('send') === '1') {
+    const sent = await maybeSendDailySummary(true);
+    return sent ?? lastDailySummary();
+  }
+  return { current: buildDailySummary(), last: lastDailySummary() };
+});
+
+get('/api/alerts', async (_b, q) => {
+  const { listOpenAlerts, scanForAlerts } = await import('../va/alerts.ts');
+  if (q.get('scan') === '1') scanForAlerts();
+  return listOpenAlerts(Number(q.get('limit') ?? 40));
+});
+
+post('/api/alerts/ack', async (body) => {
+  const { ackAlert } = await import('../va/alerts.ts');
+  const id = Number(body.id);
+  if (!Number.isFinite(id)) throw new HttpError(400, 'id required');
+  return { ok: ackAlert(id), id };
+});
+
+get('/api/voice/stt', async () => {
+  const { sttStatus } = await import('../voice/stt.ts');
+  return sttStatus();
+});
+
+get('/api/voice/tts', async () => {
+  const { azureTtsStatus } = await import('../voice/azure-tts.ts');
+  const { env } = await import('../config/env.ts');
+  const azure = azureTtsStatus();
+  const pref = (env.ttsProvider || 'auto').toLowerCase();
+  const provider =
+    pref === 'azure' && azure.configured
+      ? 'azure'
+      : pref === 'browser'
+        ? 'browser'
+        : azure.configured
+          ? 'azure'
+          : 'browser';
+  return {
+    provider,
+    azure,
+    browserDefaultLang: 'en-NG',
+    note:
+      provider === 'azure'
+        ? azure.note
+        : 'Browser speechSynthesis. Prefer en-NG (Ezinne/Abeo) when the OS/browser provides them. Text stays on this machine for browser TTS.',
+  };
+});
+
+/** Exact spoken string for TTS + on-screen caption (parity). */
+post('/api/voice/prepare', async (body) => {
+  const { spokenLine, splitSentences } = await import('../voice/tts.ts');
+  const { pronunciationMap } = await import('../voice/vocab.ts');
+  const line = spokenLine(String(body.text ?? ''), {
+    hasApproval: Boolean(body.hasApproval),
+    pronunciation: pronunciationMap(),
+  });
+  return { ...line, sentences: splitSentences(line.spoken) };
+});
+
+post('/api/voice/speak', async (body) => {
+  const { spokenLine } = await import('../voice/tts.ts');
+  const { pronunciationMap } = await import('../voice/vocab.ts');
+  const { azureTtsConfigured, synthesizeAzureSpeech } = await import('../voice/azure-tts.ts');
+  if (!azureTtsConfigured()) {
+    throw new HttpError(400, 'Azure TTS is not configured. Use browser voices, or set AZURE_SPEECH_KEY and AZURE_SPEECH_REGION.');
+  }
+  const line = spokenLine(String(body.text ?? ''), {
+    hasApproval: Boolean(body.hasApproval),
+    pronunciation: pronunciationMap(),
+  });
+  if (!line.spoken) throw new HttpError(400, 'Nothing to speak.');
+  const voice = body.voice != null ? String(body.voice) : undefined;
+  const rate = body.rate != null ? String(body.rate) : undefined;
+  const audio = await synthesizeAzureSpeech({ text: line.spoken, voice, rate });
+  return {
+    ...line,
+    voice: audio.voice,
+    mimeType: audio.mimeType,
+    audioBase64: audio.bytes.toString('base64'),
+    storesAudio: false,
+  };
+});
+
+get('/api/voice/vocab', async () => {
+  const { listVocab, whisperPromptHint } = await import('../voice/vocab.ts');
+  return { terms: listVocab(200), whisperPrompt: whisperPromptHint() };
+});
+
+post('/api/voice/vocab', async (body) => {
+  const { addVocab } = await import('../voice/vocab.ts');
+  return addVocab(
+    String(body.term ?? ''),
+    String(body.kind ?? 'term'),
+    body.pronunciation != null ? String(body.pronunciation) : null,
+  );
+});
+
+post('/api/voice/vocab/delete', async (body) => {
+  const { removeVocab } = await import('../voice/vocab.ts');
+  const id = Number(body.id);
+  if (!Number.isFinite(id)) throw new HttpError(400, 'id required');
+  return { ok: removeVocab(id) };
+});
+
+/**
+ * Transcribe mic audio. JSON body with base64 only (no disk write).
+ * Never approves actions. Transcript is returned for the user to edit before send.
+ */
+post('/api/voice/transcribe', async (body) => {
+  const { decodeAudioBase64, transcribeAudio, sttStatus } = await import('../voice/stt.ts');
+  const status = sttStatus();
+  if (status.provider !== 'groq') {
+    throw new HttpError(
+      400,
+      status.note + ' Use the browser mic fallback, or set STT_PROVIDER=groq with GROQ_API_KEY.',
+    );
+  }
+  const b64 = String(body.audioBase64 ?? body.audio ?? '');
+  const { bytes, mimeType } = decodeAudioBase64(b64);
+  const mime = body.mimeType != null ? String(body.mimeType) : mimeType;
+  try {
+    const result = await transcribeAudio({ bytes, mimeType: mime });
+    return {
+      ...result,
+      storesAudio: false,
+      // Explicit: this endpoint never decides approvals.
+      canApprove: false,
+    };
+  } finally {
+    bytes.fill(0);
+  }
+});
+
+/** Stage counts, engine status, and the next drafts waiting for a person. */
+get('/api/content/pipeline', () => {
+  const stages = contentStageCounts();
+  const waiting = listContent(80).filter((c) => c.state === 'drafted' || c.state === 'blocked');
+  const queued = listContent(80).filter((c) => c.state === 'queued').slice(0, 8);
+  const published = listContent(80).filter((c) => c.state === 'published').slice(0, 5);
+  const jobs = listJobs().filter((j) => j.state === 'ready').slice(0, 8);
+  const eng = engine.status();
+  const stage =
+    !eng.running ? 'engine_off'
+    : (stages.queued ?? 0) > 0 ? 'publishing_queue'
+    : waiting.length > 0 ? 'awaiting_approval'
+    : (stages.published ?? 0) > 0 ? 'idle_after_publish'
+    : 'idle';
+  return {
+    stage,
+    stageLabel: {
+      engine_off: 'Engine off. Approve drafts, then start the management engine.',
+      awaiting_approval: 'Waiting on you. Approve or edit drafts before anything publishes.',
+      publishing_queue: 'Engine on. Queued posts are waiting for a publish tick.',
+      idle_after_publish: 'Engine on. Nothing queued. Recent posts already went out.',
+      idle: 'Engine on. No drafts and no queue yet.',
+    }[stage],
+    engine: eng,
+    stages,
+    waiting: waiting.slice(0, 20).map((c) => ({
+      id: c.id,
+      platform: c.platform,
+      state: c.state,
+      preview: c.body.slice(0, 160),
+    })),
+    queued: queued.map((c) => ({
+      id: c.id,
+      platform: c.platform,
+      preview: c.body.slice(0, 120),
+    })),
+    published: published.map((c) => ({
+      id: c.id,
+      platform: c.platform,
+      preview: c.body.slice(0, 120),
+    })),
+    jobs: jobs.map((j) => ({
+      id: j.id,
+      kind: j.kind,
+      account: j.account_name,
+      runAt: j.run_at,
+    })),
+  };
+});
+
+/**
+ * Normalize a draft for the gate (banned words, auto-thread) and save that text.
+ * The person must Approve this exact body. Queueing will not rewrite again.
+ */
+post('/api/content/prepare', (body) => {
+  const id = Number(body.id);
+  const item = getContent(id);
+  if (!item) throw new HttpError(404, 'no such content');
+  if (item.state === 'published') throw new HttpError(400, 'published posts cannot be prepared');
+  const prepared = prepareContentBody(item);
+  markContentPrepared(id, prepared.body);
+  const saved = getContent(id)!;
+  const check = gate({
+    platform: saved.platform as never,
+    kind: saved.kind as 'post' | 'dm' | 'comment' | 'reply',
+    body: saved.body,
+    templateId: saved.template_id,
+    provenance: 'founder_approved',
+    recentBodies: recentPublishedBodies(saved.account_id),
+  });
+  return {
+    content: saved,
+    changed: prepared.changed,
+    note: prepared.note
+      || (prepared.changed ? 'Updated the draft for the gate.' : 'No changes needed. This is the final text.'),
+    gate: { pass: check.pass, violations: check.violations },
+  };
+});
+
+/** Edit a draft. Returns to drafted if it was queued or blocked. */
+post('/api/content/body', (body) => {
+  const id = Number(body.id);
+  const item = getContent(id);
+  if (!item) throw new HttpError(404, 'no such content');
+  if (item.state === 'published') throw new HttpError(400, 'published posts cannot be edited here');
+  const text = String(body.body ?? '').trim();
+  if (!text) throw new HttpError(400, 'body is empty');
+  const saved = reviseContent(id, text);
+  if (!saved) throw new HttpError(404, 'no such content');
+  const check = gate({
+    platform: saved.platform as never,
+    kind: saved.kind as 'post' | 'dm' | 'comment' | 'reply',
+    body: saved.body,
+    templateId: saved.template_id,
+    provenance: 'founder_approved',
+  });
+  return {
+    content: saved,
+    gate: { pass: check.pass, violations: check.violations },
+    note: check.pass
+      ? 'Saved. Approve again when you are happy with it.'
+      : `Saved, but the gate still flags: ${check.violations.join(' | ')}`,
+  };
+});
+
 /** Move a draft into the publish queue, or block it. Re-gated at publish time too. */
 post('/api/content/state', (body) => {
   const id = Number(body.id);
@@ -259,16 +766,30 @@ post('/api/content/state', (body) => {
     throw new HttpError(400, 'state must be queued | blocked | skipped | drafted');
   }
   if (state === 'queued') {
+    // Freeze the body: prepare must have already produced the final text the
+    // person saw. Nothing rewrites after Approve.
+    const again = prepareContentBody(item);
+    if (again.changed) {
+      markContentPrepared(id, again.body);
+      throw new HttpError(
+        409,
+        'I updated this draft for the gate. Refresh approvals and Approve the final text you see.',
+      );
+    }
+    const provenance = body.approved === true ? 'founder_approved' : contentProvenance(item.meta);
     const check = gate({
       platform: item.platform as never,
       kind: item.kind as 'post' | 'dm' | 'comment' | 'reply',
       body: item.body,
       templateId: item.template_id,
+      provenance,
+      recentBodies: recentPublishedBodies(item.account_id),
     });
     if (!check.pass) {
       setContentState(id, 'blocked', { violations: check.violations });
       throw new HttpError(400, `cannot queue: ${check.violations.join(' | ')}`);
     }
+    if (body.approved === true) markFounderApproved(id);
   }
   setContentState(id, state as never);
   return getContent(id);
@@ -279,9 +800,13 @@ get('/api/jobs', () => listJobs());
 post('/api/jobs', (body) => {
   const account = getAccountByName(String(body.account));
   if (!account) throw new HttpError(404, `no account "${String(body.account)}"`);
+  const kind = String(body.kind);
+  if (kind === 'engage_feed' && !features.engageFeedEnabled) {
+    throw new HttpError(403, engageBlockedMessage());
+  }
   return createJob({
     accountId: account.id,
-    kind: String(body.kind),
+    kind,
     payload: body.payload ?? {},
     recurrence: body.recurrence ? String(body.recurrence) : null,
     runAt: body.runAt ? String(body.runAt) : undefined,
@@ -299,6 +824,114 @@ post('/api/jobs/state', (body) => {
 });
 
 get('/api/feed', (_b, q) => recentFeedActions(Number(q.get('limit') ?? 40)));
+
+/* ── personal VA: Ask box, calendar, reminders ──────────────────────────── */
+
+post('/api/ask', async (body) => {
+  const { handleVaCommand } = await import('../va/command.ts');
+  const text = String(body.text ?? body.message ?? '').trim();
+  if (!text) throw new HttpError(400, 'text is required');
+  return handleVaCommand(text);
+});
+
+get('/api/va/status', async () => {
+  const { listUpcomingEvents, listReminders, listOpenFollowUps, recentVaTurns } = await import('../va/store.ts');
+  const { emailConfigured } = await import('../va/email.ts');
+  const { homeTimezone } = await import('../va/timezone.ts');
+  const { googleStatus } = await import('../va/google.ts');
+  return {
+    homeTimezone: homeTimezone(),
+    emailConfigured: emailConfigured(),
+    google: googleStatus(),
+    workspace: {
+      configured: Boolean(env.workspaceMcpCommand),
+      command: env.workspaceMcpCommand || null,
+    },
+    events: listUpcomingEvents(20),
+    reminders: listReminders(30),
+    followups: listOpenFollowUps(30),
+    turns: recentVaTurns(15),
+  };
+});
+
+function voiceReply(profile: { cached?: boolean; samples: number; summary: string; themes: string[]; drafts: { body: string }[] }, cached: boolean) {
+  if (cached) {
+    return [
+      'Using the voice I already saved. I did not reopen LinkedIn or Twitter.',
+      '',
+      profile.summary,
+      '',
+      profile.themes.length ? `Themes: ${profile.themes.join(', ')}.` : '',
+      'Use Refresh voice from my pages when you want me to read your pages again.',
+    ].filter(Boolean).join('\n');
+  }
+  return [
+    `I read ${profile.samples} of your recent posts and saved a voice profile.`,
+    '',
+    profile.summary,
+    '',
+    profile.themes.length ? `Themes: ${profile.themes.join(', ')}.` : '',
+    profile.drafts.length
+      ? `I drafted ${profile.drafts.length} posts in that voice. They are saved as drafts, not published. Image ideas are captions plus a brief, not generated pictures yet.`
+      : 'I saved the voice notes. Drafts need another pass if the model returned none.',
+    '',
+    'You can still edit instructions/FUNKE.md by hand. Learned voice lives in instructions/VOICE.md and is used alongside it.',
+  ].filter(Boolean).join('\n');
+}
+
+post('/api/voice/learn', async () => {
+  const { learnVoiceFromPages } = await import('../va/voice.ts');
+  const profile = await learnVoiceFromPages();
+  return {
+    ok: true,
+    samples: profile.samples,
+    summary: profile.summary,
+    themes: profile.themes,
+    drafts: profile.drafts.map((d) => ({
+      platform: d.platform,
+      imageBrief: d.imageBrief,
+      preview: d.body.slice(0, 280),
+    })),
+    cached: true,
+    reply: voiceReply(profile, true),
+  };
+});
+
+post('/api/voice/refresh', async () => {
+  const { refreshVoiceFromPages } = await import('../va/voice.ts');
+  const profile = await refreshVoiceFromPages();
+  return {
+    ok: true,
+    samples: profile.samples,
+    summary: profile.summary,
+    themes: profile.themes,
+    drafts: profile.drafts.map((d) => ({
+      platform: d.platform,
+      imageBrief: d.imageBrief,
+      preview: d.body.slice(0, 280),
+    })),
+    cached: false,
+    reply: voiceReply(profile, false),
+  };
+});
+
+get('/api/voice', async () => {
+  const { voiceLearned, readVoiceMarkdown } = await import('../va/voice.ts');
+  return { learned: voiceLearned(), markdown: readVoiceMarkdown().slice(0, 2000) };
+});
+
+get('/api/google/start', async () => {
+  const { googleAuthUrl, googleConfigured } = await import('../va/google.ts');
+  if (!googleConfigured()) {
+    throw new HttpError(
+      400,
+      `Google Calendar is not connected yet. Chat, reminders, and drafts still work without it. ` +
+        `To connect later: add Google OAuth client id and secret to your .env file, with redirect ` +
+        `http://127.0.0.1:${env.port}/api/google/callback (see docs/DATA.md).`,
+    );
+  }
+  return { url: googleAuthUrl() };
+});
 
 get('/api/suppression', () => listSuppressed());
 post('/api/suppression', (body) => {
@@ -364,12 +997,26 @@ export function startServer(): void {
   // loads it, and the API it unlocks can publish to a real LinkedIn account —
   // so an unauthenticated server that anything but this machine can reach is
   // not a warning, it is a refusal.
-  if (!isLoopback(env.bindHost) && !env.apiToken) {
-    console.error(
-      `refusing to start: BIND_HOST is ${env.bindHost}, which other machines can reach, ` +
-      'and API_TOKEN is empty.\nSet API_TOKEN (npm run setup generates one) or bind to 127.0.0.1.',
+  if (!isLoopback(env.bindHost)) {
+    if (!env.bindAllowNonLoopback) {
+      console.error(
+        `refusing to start: BIND_HOST is ${env.bindHost}. ` +
+          'Default is 127.0.0.1 only. To bind elsewhere you must set BIND_ALLOW_NON_LOOPBACK=true ' +
+          'and a non-empty API_TOKEN (see .env.example).',
+      );
+      process.exit(1);
+    }
+    if (!env.apiToken || env.apiToken.length < 24) {
+      console.error(
+        'refusing to start: non-loopback BIND_HOST requires BIND_ALLOW_NON_LOOPBACK=true ' +
+          'and an API_TOKEN of at least 24 characters.',
+      );
+      process.exit(1);
+    }
+    console.warn(
+      `WARNING: bound to ${env.bindHost} with BIND_ALLOW_NON_LOOPBACK=true. ` +
+        'Anyone who can reach this host and the API token can publish to your accounts.',
     );
-    process.exit(1);
   }
 
   const server = createServer(async (req, res) => {
@@ -383,6 +1030,31 @@ export function startServer(): void {
         return send(res, 401, { error: 'set Authorization: Bearer <API_TOKEN>' });
       }
       return send(res, 200, dashboardHtml(env.apiToken), 'text/html; charset=utf-8');
+    }
+
+    // Google OAuth redirect has no Bearer header. Loopback-only is the safety.
+    if (url.pathname === '/api/google/callback' && req.method === 'GET') {
+      try {
+        const code = url.searchParams.get('code');
+        if (!code) return send(res, 400, { error: 'missing code' });
+        const { exchangeGoogleCode } = await import('../va/google.ts');
+        const out = await exchangeGoogleCode(code);
+        const email = out.email ? ` (${out.email})` : '';
+        return send(
+          res,
+          200,
+          `<!doctype html><meta charset="utf-8"><title>Funke</title>
+           <body style="font:16px/1.5 system-ui;padding:40px;background:#0f1410;color:#f4f1ea">
+           <h1>Google connected${email}</h1>
+           <p>Funke can write events to your calendar now.</p>
+           <p><a href="/" style="color:#c4f061">Back to Funke</a></p>
+           <script>setTimeout(()=>location.href='/',1500)</script>
+           </body>`,
+          'text/html; charset=utf-8',
+        );
+      } catch (err) {
+        return send(res, 400, { error: err instanceof Error ? err.message : String(err) });
+      }
     }
 
     if (!authorized(req)) {

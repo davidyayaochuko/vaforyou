@@ -1,0 +1,96 @@
+<!DOCTYPE html><html><head><meta charset=utf-8><title>README Setup</title>
+<style>body{font:16px/1.5 -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;max-width:820px;margin:40px auto;padding:0 24px;color:#111}
+pre{background:#f6f8fa;padding:16px;border-radius:8px;overflow:auto}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px}
+h2{border-bottom:1px solid #eee;padding-bottom:8px}</style></head><body>
+<h1>social-media-automation-agent — README excerpt</h1>
+<pre>## Setup — about five minutes
+
+You need **Node 22.5+** and one **free** Groq key. That is the whole shopping list.
+
+| | | |
+|---|---|---|
+| 1 | Get a free key at [console.groq.com/keys](https://console.groq.com/keys) | ~1 min, no card |
+| 2 | `npm install` | ~2 min, downloads Chromium |
+| 3 | `npm run setup`, paste the key when asked | ~30 sec |
+| 4 | Log into LinkedIn in the window it opens | ~1 min |
+
+```bash
+git clone https://github.com/zackfounder/social-media-automation-agent.git
+cd social-media-automation-agent
+npm install
+npm run setup
+```
+
+`npm run setup` opens **a page in your browser**, not a wall of prompts. Paste the
+key and watch it get verified against Groq, click one button to open the LinkedIn
+login window, and schedule your first post — with a live checklist going green as
+each piece lands.
+
+It writes `.env` (mode `600`), generates the control-API token, creates the
+database, and copies the example brief and template bank into files that are yours
+to edit. Safe to re-run; nothing already set is overwritten. The page is served from
+127.0.0.1 for the two minutes it exists, with no CDN, no fonts and no analytics.
+
+No browser on that machine? `npm run setup:cli` is the same flow in the terminal.
+
+&lt;details>
+&lt;summary>Why a free key is the default, and how to use a paid one&lt;/summary>
+
+These are two-hundred-word posts written against a template that already dictates
+their shape, so a frontier model buys nothing. Groq's free tier runs the whole
+engine. Anthropic is available but strictly opt-in: it is used **only** when
+`ANTHROPIC_API_KEY` *and* `AI_PAID=true` are both set — a key sitting in `.env` is
+not consent to spend it. With no key at all you get a deterministic mock: every
+step works, but generated posts are always blocked by the gate, on purpose, so stub
+text can never reach a real account.
+
+&lt;/details>
+
+Then connect each account. **You log in yourself** — a real browser window opens and
+waits. Nothing types a password, reads a credential, or touches 2FA.
+
+```bash
+npm run login -- linkedin   --platform linkedin
+npm run login -- twitter    --platform x
+npm run login -- main-bsky --platform bluesky
+```
+
+One account = one browser profile = one platform. The session lives in
+`data/profiles/&lt;name>/` on this machine. Treat that directory as a credential.
+
+### What is secret, and what protects it
+
+Nothing here phones home. Everything — the database, the sessions, the keys — is a
+file on your machine.
+
+| | Where | Protected by |
+|---|---|---|
+| AI key + control token | `.env` | git-ignored, and `setup` sets it to mode `600` |
+| Logged-in sessions | `data/profiles/&lt;name>/` | git-ignored. **This is the real crown jewel** — anyone with the directory is logged in as you |
+| Dashboard + control API | `localhost:4310` | bound to `127.0.0.1`, so nothing on your network can reach it |
+
+The dashboard hands the API token to whoever loads the page, and that token can
+publish to your real account — which is exactly why the socket is loopback-only. If
+you set `BIND_HOST` to anything reachable, the server **refuses to start** without an
+`API_TOKEN`, and the dashboard route starts demanding it too. `npm run doctor` checks
+all of this and tells you what is wrong.
+
+The one thing to keep in mind: `data/` is not in git, so it is also not in any
+backup that only covers your repo.
+
+```bash
+npm run doctor                # is anything wrong? read-only, opens no browser
+npm run accounts              # what's connected, what it can do, today's budget
+npm run start                 # dashboard at http://localhost:4310
+```
+
+The engine does not auto-start. You press the button.
+
+### Posting as a LinkedIn company page
+
+A page post needs the page's own composer URL, passed when the job is created. There
+is deliberately **no fallback** to the personal profile: if the page composer cannot
+be opened, the post fails rather than landing on your own feed under your own name.
+</pre>
+</body></html>

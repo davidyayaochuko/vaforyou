@@ -1,32 +1,85 @@
-# social-media-automation-agent
+# Funke
 
-**Self-hosted social media automation.** An AI agent that runs your **LinkedIn**
-— profile and company page, posts, comments, reactions, reposts, DMs, invitations,
-replies to your own comment threads — plus **X** and **Bluesky**, from your own
-logged-in browser, on your own machine.
+**Self-hosted personal assistant.** Chat with Funke in plain English for calendar,
+reminders, and social drafts. Approve the exact final text before anything posts.
+Runs on your machine. No SaaS.
 
-No platform API keys, no approved developer app, no monthly SaaS, nothing leaving
-your laptop. One free LLM key (Groq) and a browser you log into yourself.
+This repo also includes the older **social-media-automation-agent** engine (LinkedIn,
+X, Bluesky via a browser you log into). Funke's chat is the main interface; the
+social engine stays **off** until you start it on purpose.
 
-Built on Linked Helper's architecture: one real browser per account holding a real
-session, rolling rate limits, human pacing. The agent posts, engages and replies
-autonomously, bounded by an approved template bank and a content gate enforced in
-code with no bypass.
+| You need | Notes |
+|---|---|
+| **Node.js 22.5+** | Check with `node -v` |
+| **A free Groq API key** | [console.groq.com/keys](https://console.groq.com/keys) (no card) |
+| **npm** | Comes with Node |
 
-Two docs before you touch anything:
+Docker is **not** required (and not shipped yet). You do **not** need LinkedIn, X,
+or Google on day one for chat and reminders.
 
-- [`docs/AGENT-CONTROL.md`](docs/AGENT-CONTROL.md) — how the agents are controlled, and
-  what they can and cannot do. **Read this one.**
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — the Linked Helper teardown this is built on.
+### First success (about 10 minutes)
 
-> Automating these platforms violates their terms of service. The realistic downside
-> is a restricted or banned account. The defaults here are a warm-up profile because
-> that is what keeps accounts alive — one post a day, a handful of comments, gaps of
-> 35–140 seconds between actions. Raise them slowly, over weeks, or not at all.
+```bash
+git clone <this-repo>
+cd vaforyou   # or the folder name you cloned
+npm install
+npm run setup
+# Paste your Groq key when the setup page asks.
+# You can skip LinkedIn login for now.
+npm run start
+```
+
+Open **http://127.0.0.1:4310** in your browser (this computer only).
+
+1. Ask: `What's on my plate?`
+2. Ask: `Remind me tomorrow at 9am to call Ada`
+3. Ask: `Draft a LinkedIn post about …` then tap **Approve** on the card (voice cannot approve)
+
+Nothing posts until you approve **and** you start the social engine. Leave the
+engine off while you learn.
+
+Data locations, Groq/Google/mic transcription, and retention: [`docs/DATA.md`](docs/DATA.md).
+Safety model: [`docs/AGENT-CONTROL.md`](docs/AGENT-CONTROL.md).
+
+### Voice
+
+- **Say**: reads Funke’s reply. Prefers Nigerian English browser voices (`en-NG`, e.g. Edge Abeo/Ezinne) when installed. Optional Azure neural voices via `AZURE_SPEECH_*` in `.env`.
+- **Talk**: conversation mode (hands-free). Listens, auto-sends after a pause, speaks the reply, then listens again. Voice still cannot approve; tap Approve on screen.
+- **Soc → Voice**: pick engine, voice, speed, preview, and edit vocabulary (names/places for STT + pronunciation).
+- Privacy and costs: [`docs/DATA.md`](docs/DATA.md) (Voice section).
+
+### Windows
+
+Use **PowerShell** or **Windows Terminal**. Commands below work the same if Node
+and npm are on your PATH. If `npm` is missing, install Node from
+[nodejs.org](https://nodejs.org/). WSL is optional, not required for Funke chat.
 
 ---
 
-## What it does
+## Social engine (optional, later)
+
+**Self-hosted social media automation** for **LinkedIn** (profile and company page,
+posts, comments, reactions, reposts, DMs, invitations, replies) plus **X** and
+**Bluesky**, from your own logged-in browser.
+
+No platform API keys, no approved developer app, no monthly SaaS. One free LLM key
+(Groq) and a browser you log into yourself. Built on Linked Helper's architecture:
+one real browser per account, rolling rate limits, human pacing. Agents stay bounded
+by an approved template bank and a content gate with no bypass.
+
+Two docs before you connect real accounts:
+
+- [`docs/AGENT-CONTROL.md`](docs/AGENT-CONTROL.md) - what agents can and cannot do. **Read this.**
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) - the Linked Helper teardown.
+
+> Automating these platforms violates their terms of service. The realistic downside
+> is a restricted or banned account. The defaults here are a warm-up profile because
+> that is what keeps accounts alive: one post a day, a handful of comments, gaps of
+> 35-140 seconds between actions. Raise them slowly, over weeks, or not at all.
+
+---
+
+## What the social engine does
 
 **LinkedIn — the full surface:**
 
@@ -53,16 +106,17 @@ most reliable of the three to automate — the client is open source and ships
 Everything a model writes — post, comment, reply, DM, repost commentary — passes the
 content gate before it can reach an account, and again immediately before publishing.
 
-## Setup — about five minutes
+## Setup — about five minutes (social engine optional)
 
-You need **Node 22.5+** and one **free** Groq key. That is the whole shopping list.
+You need **Node 22.5+** and one **free** Groq key. That is the whole shopping list
+for Funke chat. LinkedIn login is **optional** until you want the social engine.
 
 | | | |
 |---|---|---|
 | 1 | Get a free key at [console.groq.com/keys](https://console.groq.com/keys) | ~1 min, no card |
 | 2 | `npm install` | ~2 min, downloads Chromium |
 | 3 | `npm run setup`, paste the key when asked | ~30 sec |
-| 4 | Log into LinkedIn in the window it opens | ~1 min |
+| 4 | (Optional) Log into LinkedIn in the window it opens | ~1 min |
 
 ```bash
 git clone https://github.com/zackfounder/social-media-automation-agent.git
@@ -100,8 +154,8 @@ Then connect each account. **You log in yourself** — a real browser window ope
 waits. Nothing types a password, reads a credential, or touches 2FA.
 
 ```bash
-npm run login -- main-li   --platform linkedin
-npm run login -- main-x    --platform x
+npm run login -- linkedin   --platform linkedin
+npm run login -- twitter    --platform x
 npm run login -- main-bsky --platform bluesky
 ```
 
@@ -147,7 +201,7 @@ be opened, the post fails rather than landing on your own feed under your own na
 Before you hand a scheduler your real account, watch it write something.
 
 ```bash
-npm run draft -- main-li "the number that surprised me this week" \
+npm run draft -- linkedin "the number that surprised me this week" \
   --facts "churn 4.1%, was 6.8% in May. one onboarding change."
 ```
 
@@ -161,7 +215,7 @@ npm run queue -- discard 3
 npm run publish -- 3                   # opens the browser and publishes this one
 ```
 
-`npm run publish -- main-li --text "..."` publishes something you wrote yourself.
+`npm run publish -- linkedin --text "..."` publishes something you wrote yourself.
 It still goes through the gate, the rate limiter and the audit log — there is no
 path around them, including this one.
 
@@ -169,25 +223,25 @@ path around them, including this one.
 
 ```bash
 # write a LinkedIn post every day, publish whatever is queued every 2 hours
-npm run schedule -- add main-li generate_post --every 1d \
+npm run schedule -- add linkedin generate_post --every 1d \
   --brief "This week's real number or decision. Nothing invented." \
   --facts "MRR 180. 12 trials. Shipped the Telegram loop Tuesday."
-npm run schedule -- add main-li publish_due --every 2h
+npm run schedule -- add linkedin publish_due --every 2h
 
 # answer the comments on your own posts, twice a day, at most 3 replies
-npm run schedule -- add main-li reply_comments --every 12h --max 3
+npm run schedule -- add linkedin reply_comments --every 12h --max 3
 
 # accept the invitations worth accepting, and withdraw ones nobody answered
-npm run schedule -- add main-li grow_network --every 1d \
+npm run schedule -- add linkedin grow_network --every 1d \
   --criteria "founders, engineers and people who actually build things" \
   --accept-max 10 --withdraw-after 21
 
 # engage with the X timeline three times a day, at most 3 actions each
-npm run schedule -- add main-x engage_feed --every 8h --max 3 \
+npm run schedule -- add twitter engage_feed --every 8h --max 3 \
   --criteria "builders posting real numbers or real technical detail"
 
 # one specific post: react, comment, and share it
-npm run schedule -- add main-li engage_post --at now \
+npm run schedule -- add linkedin engage_post --at now \
   --url "https://www.linkedin.com/feed/update/urn:li:activity:123" \
   --reaction insightful \
   --brief "agree with the retention point, add what we measured"

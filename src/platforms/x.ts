@@ -269,6 +269,35 @@ export const x: PlatformAdapter = {
       : { ok: true };
   },
 
+  /** Tweets on this account's profile, newest first. */
+  async myRecentPosts(page, limit) {
+    await page.goto(this.homeUrl, { waitUntil: 'domcontentloaded' });
+    await sleep(1500);
+    const profile = page.locator("[data-testid='AppTabBar_Profile_Link']").first();
+    const href = await profile.getAttribute('href').catch(() => null);
+    if (href) {
+      await page.goto(href.startsWith('http') ? href : `https://x.com${href}`, { waitUntil: 'domcontentloaded' });
+    }
+    await readPage(page, 3);
+
+    const posts = page.locator(this.sel.timelinePosts!.join(', '));
+    const count = Math.min(await posts.count().catch(() => 0), limit);
+    const out: { url: string; excerpt: string }[] = [];
+    for (let i = 0; i < count; i++) {
+      const node = posts.nth(i);
+      const excerpt = ((await node.locator(this.sel.postText!.join(', ')).first().innerText().catch(() => '')) ?? '')
+        .trim()
+        .slice(0, 500);
+      if (!excerpt) continue;
+      const permalink = await node.locator(this.sel.permalinkAnchor!.join(', ')).first().getAttribute('href').catch(() => null);
+      const url = permalink
+        ? (permalink.startsWith('http') ? permalink : `https://x.com${permalink}`)
+        : page.url();
+      out.push({ url, excerpt });
+    }
+    return out;
+  },
+
   async readFeed(page, limit) {
     await page.goto(this.homeUrl, { waitUntil: 'domcontentloaded' });
     const items: FeedItem[] = [];

@@ -31,7 +31,11 @@ import { checkQuota } from '../src/engine/limits.ts';
 import type { PlatformId } from '../src/platforms/types.ts';
 
 const argv = process.argv.slice(2);
-const mode = process.env.WRITE_MODE ?? 'draft';
+// Prefer WRITE_MODE; else npm script name (works on Windows PowerShell too).
+const lifecycle = process.env.npm_lifecycle_event ?? '';
+const mode =
+  process.env.WRITE_MODE
+  ?? (lifecycle === 'queue' || lifecycle === 'publish' ? lifecycle : 'draft');
 
 function flag(name: string): string | undefined {
   const i = argv.indexOf(`--${name}`);

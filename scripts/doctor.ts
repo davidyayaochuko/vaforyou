@@ -85,7 +85,7 @@ if (!existsSync(env.dbPath)) {
   const accounts = listAccounts();
   ok('database', env.dbPath);
   if (accounts.length === 0) {
-    warn('no accounts connected', 'e.g. `npm run login -- main-li --platform linkedin`');
+    warn('no accounts connected', 'e.g. `npm run login -- linkedin --platform linkedin`');
   } else {
     for (const a of accounts) {
       const profile = `${env.profilesDir}/${a.name}`;

@@ -75,6 +75,114 @@ export function updateContentBody(id: number, body: string): void {
   run('UPDATE content SET body = ? WHERE id = ?', body, id);
 }
 
+/**
+ * Person edited a draft. Drop founder approval so they must Approve again.
+ * Queued, blocked, or skipped rows return to drafted.
+ */
+export function reviseContent(id: number, body: string): ContentRow | undefined {
+  const item = getContent(id);
+  if (!item) return undefined;
+  if (item.state === 'published') return item;
+  run(
+    `UPDATE content SET
+       body = ?,
+       state = CASE WHEN state IN ('queued', 'blocked', 'skipped', 'failed') THEN 'drafted' ELSE state END,
+       violations = '[]',
+       meta = json_remove(
+         json_remove(
+           json_remove(COALESCE(NULLIF(meta,''),'{}'), '$.provenance'),
+           '$.lastError'
+         ),
+         '$.prepared', '$.preparedAt', '$.publishClaim'
+       )
+     WHERE id = ? AND state != 'published'`,
+    body,
+    id,
+  );
+  return getContent(id);
+}
+
+export function contentStageCounts(): Record<string, number> {
+  const rows = all<{ state: string; n: number }>(
+    `SELECT state, COUNT(*) AS n FROM content GROUP BY state`,
+  );
+  const out: Record<string, number> = {
+    drafted: 0,
+    blocked: 0,
+    queued: 0,
+    published: 0,
+    skipped: 0,
+    failed: 0,
+  };
+  for (const row of rows) out[row.state] = Number(row.n);
+  return out;
+}
+
+export function contentProvenance(meta: string | null | undefined): 'template' | 'founder_approved' {
+  try {
+    const parsed = JSON.parse(meta || '{}') as { provenance?: string };
+    return parsed.provenance === 'founder_approved' ? 'founder_approved' : 'template';
+  } catch {
+    return 'template';
+  }
+}
+
+/** Set only when a person explicitly approves a draft. Never set by the model. */
+export function markFounderApproved(id: number): void {
+  run(
+    `UPDATE content SET meta = json_set(COALESCE(NULLIF(meta,''),'{}'), '$.provenance', 'founder_approved') WHERE id = ?`,
+    id,
+  );
+}
+
+/** Mark that the person was shown this exact body before Approve. */
+export function markContentPrepared(id: number, body: string): void {
+  run(
+    `UPDATE content SET
+       body = ?,
+       meta = json_set(
+         json_set(COALESCE(NULLIF(meta,''),'{}'), '$.prepared', true),
+         '$.preparedAt', ?
+       )
+     WHERE id = ? AND state != 'published'`,
+    body,
+    new Date().toISOString(),
+    id,
+  );
+}
+
+/**
+ * Claim a queued row for publish. Returns null if already published, claimed,
+ * or no longer queued. Prevents double-posts on retry overlap.
+ */
+export function claimContentForPublish(id: number, claim: string): ContentRow | undefined {
+  const current = getContent(id);
+  if (!current) return undefined;
+  if (current.state === 'published') return undefined;
+  if (current.state !== 'queued') return undefined;
+  try {
+    const meta = JSON.parse(current.meta || '{}') as { publishClaim?: string };
+    if (meta.publishClaim && meta.publishClaim !== claim) return undefined;
+  } catch {
+    /* continue */
+  }
+  run(
+    `UPDATE content SET meta = json_set(COALESCE(NULLIF(meta,''),'{}'), '$.publishClaim', ?)
+     WHERE id = ? AND state = 'queued'`,
+    claim,
+    id,
+  );
+  const next = getContent(id);
+  if (!next || next.state !== 'queued') return undefined;
+  try {
+    const meta = JSON.parse(next.meta || '{}') as { publishClaim?: string };
+    if (meta.publishClaim !== claim) return undefined;
+  } catch {
+    return undefined;
+  }
+  return next;
+}
+
 export function setContentState(
   id: number,
   state: ContentRow['state'],
@@ -87,8 +195,11 @@ export function setContentState(
        violations   = COALESCE(?, violations),
        attempts     = attempts + 1,
        published_at = CASE WHEN ? = 'published' THEN datetime('now') ELSE published_at END,
-       meta         = CASE WHEN ? IS NULL THEN meta
-                           ELSE json_set(COALESCE(NULLIF(meta,''),'{}'), '$.lastError', ?) END
+       meta         = json_remove(
+         CASE WHEN ? IS NULL THEN COALESCE(NULLIF(meta,''),'{}')
+              ELSE json_set(COALESCE(NULLIF(meta,''),'{}'), '$.lastError', ?) END,
+         '$.publishClaim'
+       )
      WHERE id = ?`,
     state,
     extra.permalink ?? null,

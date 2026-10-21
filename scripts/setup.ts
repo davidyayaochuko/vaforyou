@@ -170,14 +170,14 @@ if (connected.some((a) => a.platform === 'linkedin')) {
     const { spawnSync } = await import('node:child_process');
     // Inherit the terminal: login.ts asks its own question, and it has to reach
     // the same person who is sitting here.
-    spawnSync('npx', ['tsx', 'scripts/login.ts', 'main-li', '--platform', 'linkedin'], {
+    spawnSync('npx', ['tsx', 'scripts/login.ts', 'linkedin', '--platform', 'linkedin'], {
       cwd: root,
       stdio: 'inherit',
     });
     launched = true;
   } else {
     say('   skipped — run it yourself when you are ready:');
-    say('     npm run login -- main-li  --platform linkedin');
+    say('     npm run login -- linkedin  --platform linkedin');
   }
 }
 
@@ -186,17 +186,17 @@ say('\n──────────────');
 say(`setup done. AI provider: ${buildAiClient().kind}${groqKey ? ` (${model})` : ''}`);
 if (!launched) {
   say('\nConnect an account when you want one. Pick any name:\n');
-  say('   npm run login -- main-li  --platform linkedin');
-  say('   npm run login -- main-x   --platform x');
+  say('   npm run login -- linkedin  --platform linkedin');
+  say('   npm run login -- twitter   --platform x');
 }
 say('\nThen:\n');
 say('   npm run doctor       # anything wrong? read-only, opens no browser');
 say('   npm run accounts     # what is connected, and today\'s budget');
 say(`   npm run start        # dashboard at http://localhost:${env.port}`);
 say('\nSchedule the first job — one post a day, published every two hours:\n');
-say('   npm run schedule -- add main-li generate_post --every 1d \\');
+say('   npm run schedule -- add linkedin generate_post --every 1d \\');
 say('     --brief "this week\'s real number or decision" --facts "..."');
-say('   npm run schedule -- add main-li publish_due --every 2h');
+say('   npm run schedule -- add linkedin publish_due --every 2h');
 say('\nThe engine never auto-starts. You press the button.\n');
 
 if (!launched) rl.close();

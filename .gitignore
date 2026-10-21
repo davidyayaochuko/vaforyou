@@ -1,7 +1,25 @@
 node_modules/
 data/
+data/**
 .env
+.env.*
+!.env.example
+.cursor/
 *.log
+*.pem
+*.key
+*.db
+*.sqlite
+**/google-token.json
+**/*-token.json
+**/.credentials/
+**/credentials.json
+**/token.json
+coverage/
+dist/
+.DS_Store
+.vscode/
+.idea/
 
 # Your brief and your approved shapes. The .example versions ship; these are
 # yours, they stay on this machine, and the loaders prefer them when present.
@@ -9,8 +27,27 @@ instructions/GLOBAL.md
 instructions/linkedin.md
 instructions/x.md
 instructions/bluesky.md
+instructions/FUNKE.md
+instructions/VOICE.md
 templates/*/bank.json
+
+# Your knowledge base. Examples ship; local copies are private.
+knowledge/*.md
+!knowledge/*.example.md
+!knowledge/README.md
+
+# Local QA outputs (screenshots, persona transcripts). Briefs/docs under qa/ can ship.
+qa/**/persona-results/
+qa/**/screenshots/
+qa/**/*.png
+/tmp/
 
 # Local integrations that are nobody else's business.
 scripts/rail.ts
 com.crewhq.rail.plist
+
+# Usage-test env copies and ad-hoc logs (never commit)
+/tmp/funke-*
+*.local.json
+.env.local
+.env.usage

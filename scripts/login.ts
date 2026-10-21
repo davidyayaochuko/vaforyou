@@ -10,8 +10,8 @@ import { stdin, stdout } from 'node:process';
  * credentials, and never touches a 2FA code. It waits until the platform says
  * you're in, then leaves the session in that account's profile directory.
  *
- *   npm run login -- main-linkedin --platform linkedin
- *   npm run login -- main-x        --platform x
+ *   npm run login -- linkedinnkedin --platform linkedin
+ *   npm run login -- twitter        --platform x
  *
  * One account = one browser profile = one platform. Never share a profile directory
  * between two accounts, and never between two platforms.

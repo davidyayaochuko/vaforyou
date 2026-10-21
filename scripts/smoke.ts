@@ -271,6 +271,13 @@ check('a valid thread passes the per-tweet cap',
   gate({ platform: 'x', kind: 'post', templateId: 'x.breakdown-thread', body: thread }).pass);
 check('one over-long tweet inside a thread is rejected',
   !gate({ platform: 'x', kind: 'post', templateId: 'x.breakdown-thread', body: `1/ ok\n2/ ${'y'.repeat(300)}` }).pass);
+const { fitAsThread } = await import('../src/content/thread.ts');
+const longTweet = `${'Shipped a fix. '.repeat(20)}It holds.`;
+const fitted = fitAsThread(longTweet, 280);
+check('an over-long tweet becomes a numbered thread', fitted.threaded && splitThread(fitted.body).length >= 2, splitThread(fitted.body).length);
+check('every part of that thread fits in 280 characters',
+  splitThread(fitted.body).every((part) => part.length <= 280),
+  splitThread(fitted.body).map((part) => part.length));
 
 console.log('\n10. Instructions load for every platform');
 for (const p of PLATFORM_IDS) {

@@ -25,6 +25,48 @@ const BANNED_WORDS = [
   'revolutionize', 'cutting-edge', 'best-in-class', 'synergy',
 ];
 
+const PLAIN_WORDS: Record<string, string> = {
+  leverage: 'use',
+  ecosystem: 'space',
+  streamline: 'simplify',
+  empower: 'help',
+  seamless: 'simple',
+  optimize: 'improve',
+  unlock: 'open',
+  'game-changer': 'shift',
+  'game changer': 'shift',
+  journey: 'path',
+  passionate: 'serious',
+  'excited to announce': 'sharing',
+  'thrilled to announce': 'sharing',
+  delve: 'look',
+  "in today's world": 'now',
+  'dive deep': 'look closely',
+  'circle back': 'return',
+  'move the needle': 'change the result',
+  'low-hanging fruit': 'easy win',
+  revolutionize: 'change',
+  'cutting-edge': 'new',
+  'best-in-class': 'strong',
+  synergy: 'fit',
+};
+
+/** Swap banned phrases for plain words so a draft can pass the gate without those words. */
+export function replaceBannedWords(body: string): { body: string; replaced: string[] } {
+  let next = body;
+  const replaced: string[] = [];
+  const words = [...BANNED_WORDS].sort((a, b) => b.length - a.length);
+  for (const word of words) {
+    const re = new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+    const plain = PLAIN_WORDS[word] ?? 'that';
+    const updated = next.replace(re, plain);
+    if (updated === next) continue;
+    replaced.push(word);
+    next = updated;
+  }
+  return { body: next.replace(/[ \t]{2,}/g, ' ').trim(), replaced };
+}
+
 /** Raw database field names in prose are the clearest tell that a machine wrote it. */
 const KPI_KEYS = [
   'total_users', 'paying_users', 'trialing_users', 'active_users_7d',

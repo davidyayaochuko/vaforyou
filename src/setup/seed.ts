@@ -11,12 +11,16 @@ export function seedConfigFiles(root: string): string[] {
   const made: string[] = [];
   const pairs: [string, string][] = [
     ['instructions/GLOBAL.example.md', 'instructions/GLOBAL.md'],
+    ['instructions/FUNKE.example.md', 'instructions/FUNKE.md'],
     ['instructions/linkedin.example.md', 'instructions/linkedin.md'],
     ['instructions/x.example.md', 'instructions/x.md'],
     ['instructions/bluesky.example.md', 'instructions/bluesky.md'],
     ['templates/linkedin/bank.example.json', 'templates/linkedin/bank.json'],
     ['templates/x/bank.example.json', 'templates/x/bank.json'],
     ['templates/bluesky/bank.example.json', 'templates/bluesky/bank.json'],
+    ['knowledge/faq.example.md', 'knowledge/faq.md'],
+    ['knowledge/policies.example.md', 'knowledge/policies.md'],
+    ['knowledge/usage-company.example.md', 'knowledge/usage-company.md'],
   ];
   for (const [from, to] of pairs) {
     const src = join(root, from);

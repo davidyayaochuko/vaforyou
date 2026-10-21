@@ -7,9 +7,9 @@ import { getPlatform } from '../src/platforms/index.ts';
  * Manage the job queue: what each account does, and how often.
  *
  *   npm run schedule -- list
- *   npm run schedule -- add main-x engage_feed --every 6h --max 3
- *   npm run schedule -- add main-li generate_post --every 1d --brief "..." --facts "..."
- *   npm run schedule -- add main-li publish_due --every 2h
+ *   npm run schedule -- add twitter engage_feed --every 6h --max 3
+ *   npm run schedule -- add linkedin generate_post --every 1d --brief "..." --facts "..."
+ *   npm run schedule -- add linkedin publish_due --every 2h
  *   npm run schedule -- pause 3
  *   npm run schedule -- resume 3
  *   npm run schedule -- rm 3

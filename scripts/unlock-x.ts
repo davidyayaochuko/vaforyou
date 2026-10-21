@@ -1,7 +1,7 @@
 /**
  * Unlock X's encrypted chat on an account's browser profile, once.
  *
- *   npm run unlock:x                 the personal account (main-x)
+ *   npm run unlock:x                 the personal account (twitter)
  *   npm run unlock:x -- crew-x       a different account
  *
  * X encrypts DMs behind a passcode. Until this browser profile has been
@@ -20,7 +20,7 @@ import { stdin, stdout } from 'node:process';
 import { initSchema, listAccounts } from '../src/db/index.ts';
 import { openSession } from '../src/browser/session.ts';
 
-const name = process.argv.slice(2).find((a) => !a.startsWith('-')) ?? 'main-x';
+const name = process.argv.slice(2).find((a) => !a.startsWith('-')) ?? 'twitter';
 
 initSchema();
 const account = listAccounts().find((a) => a.name === name);

@@ -36,7 +36,7 @@ const only = (flag('only') ?? '').split(',').map((s) => s.trim()).filter(Boolean
 // a genuinely separate account, so it stays.
 const WANTED: { platform: string; name: string; label: string }[] = [
   { platform: 'linkedin',     name: 'main',          label: 'LinkedIn — your personal account' },
-  { platform: 'x',            name: 'main-x',        label: 'X — your personal account' },
+  { platform: 'x',            name: 'twitter',       label: 'X / Twitter — your personal account' },
   { platform: 'bluesky',      name: 'main-bsky',     label: 'Bluesky' },
 ];
 

@@ -93,7 +93,9 @@ export class Engine {
       return Math.min(window.retryInSeconds * 1000, 15 * 60_000);
     }
 
-    const campaigns = listRunningCampaigns();
+    // Outreach funnel stays idle unless OUTREACH_ENABLED=true.
+    const { features } = await import('../config/features.ts');
+    const campaigns = features.outreachEnabled ? listRunningCampaigns() : [];
 
     // Every account that has either a running campaign or a due job. One browser
     // per account, one action at a time, accounts serviced round-robin.

@@ -2,13 +2,36 @@ import { initSchema } from '../db/index.ts';
 import { startServer } from './http.ts';
 import { engine } from '../engine/scheduler.ts';
 import { closeAllSessions } from '../browser/session.ts';
+import { ensureVaTables } from '../va/store.ts';
+import { startReminderLoop, stopReminderLoop } from '../va/reminders.ts';
+import { ensureApprovalsTable, expireStaleApprovals } from '../guardrails/approvals.ts';
+import { ensureAuditTable } from '../guardrails/audit.ts';
+import { ensureMemoryTable, hydrateSessionFromHistory } from '../va/memory.ts';
+import { ensureConversations } from '../va/conversations.ts';
+import { ensureKbTable, loadKnowledgeFiles } from '../va/knowledge.ts';
+import { ensureAlertsTable } from '../va/alerts.ts';
+import { ensureVocabTable } from '../voice/vocab.ts';
+import { env } from '../config/env.ts';
 
 initSchema();
+ensureVaTables();
+ensureApprovalsTable();
+ensureAuditTable();
+ensureMemoryTable();
+ensureConversations();
+ensureVocabTable();
+ensureKbTable();
+ensureAlertsTable();
+loadKnowledgeFiles();
+hydrateSessionFromHistory(10);
+expireStaleApprovals();
 startServer();
+startReminderLoop();
 
-// The engine does not auto-start. You press the button (or POST /api/engine/start)
-// — nothing touches a LinkedIn account because a process happened to boot.
-console.log('Engine is stopped. Start it from the dashboard when you are ready.');
+// The social engine does not auto-start. You press the button (or POST /api/engine/start).
+// Reminder email loop starts with the server so Ask-box reminders still fire.
+console.log('Social engine is stopped. Start it from the dashboard when you are ready.');
+console.log(`Reminder loop is running. Ask box: http://${env.bindHost}:${env.port}`);
 
 let shuttingDown = false;
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {
@@ -16,6 +39,7 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) {
     if (shuttingDown) process.exit(1);
     shuttingDown = true;
     console.log(`\n${sig} — finishing the current action, then closing the browser…`);
+    stopReminderLoop();
     await engine.stop();
     await closeAllSessions();
     process.exit(0);

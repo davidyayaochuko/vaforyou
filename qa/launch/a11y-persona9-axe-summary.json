@@ -1,0 +1,429 @@
+{
+  "persona": 9,
+  "keyboard": {
+    "tabOrderNotes": "Live Tab cycle (Playwright, no body.focus): Say → Mic → textarea → Send → BODY → Fk…G dock → repeat. Suggestion chips drop out of cycle once chat has messages. Hidden panels use display:none and are skipped.",
+    "trailCorrected": [
+      {"step": 1, "id": "speakBtn", "name": "Say", "outlineVisible": true},
+      {"step": 2, "id": "micBtn", "name": "Mic (aria-label Hold to talk)", "outlineVisible": true},
+      {"step": 3, "id": "askBox", "name": "Message textarea", "outlineVisible": false},
+      {"step": 4, "id": "askBtn", "name": "Send (↑)", "outlineVisible": true},
+      {"step": 5, "tag": "BODY", "name": "spurious body stop", "outlineVisible": false},
+      {"step": 6, "id": "tab-chat", "name": "Fk (title Chat on live build)", "outlineVisible": true}
+    ],
+    "trail": [
+      {
+        "step": 1,
+        "tag": "BODY",
+        "name": "(body)"
+      },
+      {
+        "step": 2,
+        "tag": "BODY",
+        "name": "(body)"
+      },
+      {
+        "step": 3,
+        "tag": "BODY",
+        "name": "(body)"
+      },
+      {
+        "step": 4,
+        "tag": "BODY",
+        "name": "(body)"
+      },
+      {
+        "step": 5,
+        "tag": "BODY",
+        "name": "(body)"
+      },
+      {
+        "step": 6,
+        "tag": "BODY",
+        "name": "(body)"
+      },
+      {
+        "step": 7,
+        "tag": "BODY",
+        "name": "(body)"
+      },
+      {
+        "step": 8,
+        "tag": "BODY",
+        "name": "(body)"
+      },
+      {
+        "step": 9,
+        "tag": "BODY",
+        "name": "(body)"
+      },
+      {
+        "step": 10,
+        "tag": "BODY",
+        "name": "(body)"
+      },
+      {
+        "step": 11,
+        "tag": "BODY",
+        "name": "(body)"
+      },
+      {
+        "step": 12,
+        "tag": "BODY",
+        "name": "(body)"
+      },
+      {
+        "step": 13,
+        "tag": "BODY",
+        "name": "(body)"
+      },
+      {
+        "step": 14,
+        "tag": "BODY",
+        "name": "(body)"
+      },
+      {
+        "step": 15,
+        "tag": "BODY",
+        "name": "(body)"
+      },
+      {
+        "step": 16,
+        "tag": "BODY",
+        "name": "(body)"
+      },
+      {
+        "step": 17,
+        "tag": "BODY",
+        "name": "(body)"
+      },
+      {
+        "step": 18,
+        "tag": "BODY",
+        "name": "(body)"
+      },
+      {
+        "step": 19,
+        "tag": "BODY",
+        "name": "(body)"
+      },
+      {
+        "step": 20,
+        "tag": "BODY",
+        "name": "(body)"
+      }
+    ],
+    "findings": [
+      {
+        "severity": "blocker",
+        "issue": "Tab order starts on fixed composer (Say/Mic/textarea/Send) before main dock tabs; suggestion chips fall out of Tab cycle once chat has messages, so keyboard-only users cannot reach starter prompts without typing blind into the textarea"
+      },
+      {
+        "severity": "blocker",
+        "issue": "Primary message textarea uses outline:0 with no replacement focus indicator (keyboard focus is effectively invisible on askBox)"
+      },
+      {
+        "severity": "major",
+        "issue": "Spurious BODY tab stop between composer and dock on each cycle"
+      },
+      {
+        "severity": "moderate",
+        "issue": "Nav tabs rely on title/tooltip only; no aria-label (screen reader may read \"Fk\" not \"Chat\")",
+        "tabs": [
+          {
+            "text": "Fk",
+            "title": "Chat"
+          },
+          {
+            "text": "Cal",
+            "title": "Calendar"
+          },
+          {
+            "text": "Soc",
+            "title": "Accounts"
+          },
+          {
+            "text": "Pg",
+            "title": "Page pipeline"
+          },
+          {
+            "text": "Ok",
+            "title": "Approvals"
+          },
+          {
+            "text": "G",
+            "title": "Connect Google"
+          }
+        ]
+      },
+      {
+        "severity": "moderate",
+        "issue": "Send button is icon-only (↑) with title=\"Send\" but no aria-label"
+      },
+      {
+        "severity": "minor",
+        "issue": "Say button has title=\"Read replies aloud\" but no aria-label"
+      },
+      {
+        "severity": "info",
+        "issue": "No Approve button found on Ok view during this run (may need pending approval)"
+      }
+    ],
+    "focusTrap": {
+      "view": "Ok",
+      "uniqueFocusTargets": [
+        "(body)"
+      ]
+    }
+  },
+  "ariaLabels": {
+    "tabs": [
+      {
+        "key": "Fk",
+        "text": "Fk",
+        "ariaLabel": null,
+        "title": "Chat",
+        "accessibleName": "Chat"
+      },
+      {
+        "key": "Cal",
+        "text": "Cal",
+        "ariaLabel": null,
+        "title": "Calendar",
+        "accessibleName": "Calendar"
+      },
+      {
+        "key": "Soc",
+        "text": "Soc",
+        "ariaLabel": null,
+        "title": "Accounts",
+        "accessibleName": "Accounts"
+      },
+      {
+        "key": "Pg",
+        "text": "Pg",
+        "ariaLabel": null,
+        "title": "Page pipeline",
+        "accessibleName": "Page pipeline"
+      },
+      {
+        "key": "Ok",
+        "text": "Ok",
+        "ariaLabel": null,
+        "title": "Approvals",
+        "accessibleName": "Approvals"
+      },
+      {
+        "key": "G",
+        "text": "G",
+        "ariaLabel": null,
+        "title": "Connect Google",
+        "accessibleName": "Connect Google"
+      }
+    ],
+    "mic": {
+      "key": "Mic",
+      "text": "Mic",
+      "ariaLabel": "Hold to talk",
+      "title": "Hold to talk",
+      "accessibleName": "Hold to talk"
+    },
+    "say": {
+      "key": "Say",
+      "text": "Say",
+      "ariaLabel": null,
+      "title": "Read replies aloud",
+      "accessibleName": "Read replies aloud"
+    },
+    "send": {
+      "key": "Send",
+      "text": "↑",
+      "ariaLabel": null,
+      "title": "Send",
+      "accessibleName": "Send"
+    }
+  },
+  "axe": {
+    "Ok": {
+      "view": "Ok",
+      "url": "http://127.0.0.1:4321/",
+      "violationCount": 3,
+      "byImpact": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 3,
+        "minor": 0
+      },
+      "violations": [
+        {
+          "id": "heading-order",
+          "impact": "moderate",
+          "help": "Heading levels should only increase by one",
+          "nodes": 1
+        },
+        {
+          "id": "landmark-one-main",
+          "impact": "moderate",
+          "help": "Document should have one main landmark",
+          "nodes": 1
+        },
+        {
+          "id": "region",
+          "impact": "moderate",
+          "help": "All page content should be contained by landmarks",
+          "nodes": 10
+        }
+      ],
+      "incomplete": 1,
+      "passes": 25
+    },
+    "chat": {
+      "view": "chat",
+      "url": "http://127.0.0.1:4321/",
+      "violationCount": 2,
+      "byImpact": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 2,
+        "minor": 0
+      },
+      "violations": [
+        {
+          "id": "landmark-one-main",
+          "impact": "moderate",
+          "help": "Document should have one main landmark",
+          "nodes": 1
+        },
+        {
+          "id": "region",
+          "impact": "moderate",
+          "help": "All page content should be contained by landmarks",
+          "nodes": 3
+        }
+      ],
+      "incomplete": 1,
+      "passes": 25
+    },
+    "Cal": {
+      "view": "Cal",
+      "url": "http://127.0.0.1:4321/",
+      "violationCount": 3,
+      "byImpact": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 3,
+        "minor": 0
+      },
+      "violations": [
+        {
+          "id": "heading-order",
+          "impact": "moderate",
+          "help": "Heading levels should only increase by one",
+          "nodes": 1
+        },
+        {
+          "id": "landmark-one-main",
+          "impact": "moderate",
+          "help": "Document should have one main landmark",
+          "nodes": 1
+        },
+        {
+          "id": "region",
+          "impact": "moderate",
+          "help": "All page content should be contained by landmarks",
+          "nodes": 3
+        }
+      ],
+      "incomplete": 1,
+      "passes": 25
+    },
+    "Soc": {
+      "view": "Soc",
+      "url": "http://127.0.0.1:4321/",
+      "violationCount": 3,
+      "byImpact": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 3,
+        "minor": 0
+      },
+      "violations": [
+        {
+          "id": "heading-order",
+          "impact": "moderate",
+          "help": "Heading levels should only increase by one",
+          "nodes": 1
+        },
+        {
+          "id": "landmark-one-main",
+          "impact": "moderate",
+          "help": "Document should have one main landmark",
+          "nodes": 1
+        },
+        {
+          "id": "region",
+          "impact": "moderate",
+          "help": "All page content should be contained by landmarks",
+          "nodes": 4
+        }
+      ],
+      "incomplete": 1,
+      "passes": 25
+    },
+    "Pg": {
+      "view": "Pg",
+      "url": "http://127.0.0.1:4321/",
+      "violationCount": 3,
+      "byImpact": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 3,
+        "minor": 0
+      },
+      "violations": [
+        {
+          "id": "heading-order",
+          "impact": "moderate",
+          "help": "Heading levels should only increase by one",
+          "nodes": 1
+        },
+        {
+          "id": "landmark-one-main",
+          "impact": "moderate",
+          "help": "Document should have one main landmark",
+          "nodes": 1
+        },
+        {
+          "id": "region",
+          "impact": "moderate",
+          "help": "All page content should be contained by landmarks",
+          "nodes": 4
+        }
+      ],
+      "incomplete": 1,
+      "passes": 25
+    }
+  },
+  "reached_first_success": {
+    "attempted": true,
+    "chat_plate": true,
+    "reminder": true,
+    "linkedin_approval": false,
+    "approve_via_keyboard": false,
+    "notes": [
+      "Plate and reminder succeeded via textarea + Enter after programmatic focus.",
+      "LinkedIn draft text appeared in chat thread; inline Approve card not confirmed via Tab/Enter on Ok view (no pending Approve control found during Ok scan)."
+    ]
+  },
+  "screenshots": [
+    "a11y_02_keyboard-tab-cycle.png",
+    "a11y_03_plate-via-keyboard.png",
+    "a11y_04_reminder-keyboard.png",
+    "a11y_05-linkedin-draft.png",
+    "a11y_06-ok-approvals-tab.png",
+    "a11y_07_axe-ok.png",
+    "a11y_07_axe-chat.png",
+    "a11y_07_axe-cal.png",
+    "a11y_07_axe-soc.png",
+    "a11y_07_axe-pg.png"
+  ]
+}

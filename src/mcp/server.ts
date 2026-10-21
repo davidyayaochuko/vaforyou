@@ -113,6 +113,10 @@ server.tool(
   },
   async ({ campaignId, status }) => {
     if (!getCampaign(campaignId)) throw new Error(`no campaign ${campaignId}`);
+    const { features, outreachBlockedMessage } = await import('../config/features.ts');
+    if (status === 'running' && !features.outreachEnabled) {
+      throw new Error(outreachBlockedMessage());
+    }
     setCampaignStatus(campaignId, status);
     return text({ campaignId, status });
   },
@@ -423,6 +427,16 @@ server.tool(
   async ({ account, kind, recurrence, payload, runAt }) => {
     const acc = getAccountByName(account);
     if (!acc) throw new Error(`no account "${account}"`);
+    const { features, engageBlockedMessage } = await import('../config/features.ts');
+    const needsEngage =
+      kind === 'engage_feed'
+      || kind === 'engage_post'
+      || kind === 'grow_network'
+      || kind === 'visit_profiles'
+      || kind === 'follow_targets';
+    if (needsEngage && !features.engageFeedEnabled) {
+      throw new Error(engageBlockedMessage());
+    }
     const adapter = getPlatform(acc.platform);
     if (kind === 'engage_feed' && !adapter.can.feed) {
       throw new Error(`${adapter.displayName} has no feed capability`);

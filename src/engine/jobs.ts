@@ -11,7 +11,7 @@ import {
   createContent,
   dueContent,
   setContentState,
-  recentPublishedBodies,
+  recentPublishedBodies, contentProvenance, claimContentForPublish,
   recordTemplateUse,
   templateUsage,
   markFeedSeen,
@@ -19,6 +19,7 @@ import {
   type JobRow,
 } from '../db/content.ts';
 import { sleep, randInt, dwell } from '../browser/human.ts';
+import { features, engageBlockedMessage } from '../config/features.ts';
 
 export interface JobDeps {
   page: Page;
@@ -42,6 +43,16 @@ export interface JobOutcome {
 export async function runJob(deps: JobDeps, job: JobRow): Promise<JobOutcome> {
   const platformId = deps.account.platform as PlatformId;
   const payload = safeJson(job.payload);
+
+  const needsEngage =
+    job.kind === 'engage_feed'
+    || job.kind === 'engage_post'
+    || job.kind === 'grow_network'
+    || job.kind === 'visit_profiles'
+    || job.kind === 'follow_targets';
+  if (needsEngage && !features.engageFeedEnabled) {
+    return { ok: false, detail: { blocked: true }, error: engageBlockedMessage() };
+  }
 
   switch (job.kind) {
     case 'generate_post':
@@ -148,6 +159,9 @@ async function publishDue(deps: JobDeps, platform: PlatformId): Promise<JobOutco
   if (queue.length === 0) return { ok: true, detail: { published: 0, reason: 'nothing due' } };
 
   const item = queue[0]!;
+  if (item.state === 'published') {
+    return { ok: true, detail: { published: 0, reason: 'already published' } };
+  }
 
   const quotaAction = item.kind === 'dm' ? 'dm' : 'post';
   const quota = checkQuota(deps.account.id, quotaAction, platform);
@@ -165,6 +179,7 @@ async function publishDue(deps: JobDeps, platform: PlatformId): Promise<JobOutco
     body: item.body,
     templateId: item.template_id,
     recentBodies: recentPublishedBodies(deps.account.id),
+    provenance: contentProvenance(item.meta),
   });
   if (!recheck.pass) {
     setContentState(item.id, 'blocked', { violations: recheck.violations });
@@ -177,30 +192,37 @@ async function publishDue(deps: JobDeps, platform: PlatformId): Promise<JobOutco
     return { ok: false, detail: { contentId: item.id }, error: `${platform} has no post capability` };
   }
 
+  const claim = `pub-${item.id}-${Date.now()}`;
+  const claimed = claimContentForPublish(item.id, claim);
+  if (!claimed) {
+    deps.log(`publish skipped: content #${item.id} already claimed or not queued`);
+    return { ok: true, detail: { published: 0, reason: 'already claimed or published' } };
+  }
+
   // Some content is authored from a specific page rather than the composer.
-  if (item.target_ref) {
-    await deps.page.goto(item.target_ref, { waitUntil: 'domcontentloaded' });
+  if (claimed.target_ref) {
+    await deps.page.goto(claimed.target_ref, { waitUntil: 'domcontentloaded' });
     await dwell();
   }
 
-  const out = await adapter.post(deps.page, item.body, { postAs: deps.account.post_as });
+  const out = await adapter.post(deps.page, claimed.body, { postAs: deps.account.post_as });
 
   logAction({
     accountId: deps.account.id,
     action: 'post',
     status: out.ok ? 'ok' : 'fail',
     counted: out.ok,
-    detail: { contentId: item.id, platform, error: out.error ?? null },
+    detail: { contentId: claimed.id, platform, error: out.error ?? null },
   });
 
   if (!out.ok) {
-    setContentState(item.id, 'failed', { error: out.error });
+    setContentState(claimed.id, 'failed', { error: out.error });
     deps.log(`publish failed: ${out.error}`);
-    return { ok: false, detail: { contentId: item.id }, error: out.error };
+    return { ok: false, detail: { contentId: claimed.id }, error: out.error };
   }
 
-  setContentState(item.id, 'published', { permalink: out.permalink ?? null });
-  deps.log(`published #${item.id} to ${platform}${out.permalink ? ` -> ${out.permalink}` : ''}`);
+  setContentState(claimed.id, 'published', { permalink: out.permalink ?? null });
+  deps.log(`published #${claimed.id} to ${platform}${out.permalink ? ` -> ${out.permalink}` : ''}`);
   return { ok: true, detail: { contentId: item.id, permalink: out.permalink ?? null } };
 }
 

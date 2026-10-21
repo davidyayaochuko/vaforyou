@@ -182,3 +182,52 @@ CREATE TABLE IF NOT EXISTS feed_seen (
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE (account_id, post_ref)
 );
+
+-- ── personal VA: calendar, reminders, follow-ups ─────────────────────────────
+
+CREATE TABLE IF NOT EXISTS calendar_events (
+  id              INTEGER PRIMARY KEY,
+  title           TEXT NOT NULL,
+  start_at        TEXT NOT NULL,
+  end_at          TEXT,
+  timezone        TEXT NOT NULL,
+  location        TEXT,
+  notes           TEXT,
+  source_tz       TEXT,
+  google_event_id TEXT,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS reminders (
+  id               INTEGER PRIMARY KEY,
+  title            TEXT NOT NULL,
+  body             TEXT,
+  due_at           TEXT NOT NULL,
+  channel          TEXT NOT NULL DEFAULT 'email',
+  state            TEXT NOT NULL DEFAULT 'scheduled',
+  related_event_id INTEGER REFERENCES calendar_events(id) ON DELETE SET NULL,
+  last_error       TEXT,
+  sent_at          TEXT,
+  created_at       TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders (state, due_at);
+
+CREATE TABLE IF NOT EXISTS followups (
+  id         INTEGER PRIMARY KEY,
+  who        TEXT NOT NULL,
+  what       TEXT NOT NULL,
+  due_at     TEXT,
+  channel    TEXT,
+  state      TEXT NOT NULL DEFAULT 'open',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS va_turns (
+  id         INTEGER PRIMARY KEY,
+  input      TEXT NOT NULL,
+  intent     TEXT NOT NULL,
+  reply      TEXT NOT NULL,
+  detail     TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
