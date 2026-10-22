@@ -1,0 +1,37 @@
+---
+import Icon from './Icon.astro';
+---
+<button
+  type="button"
+  class="theme-toggle"
+  id="themeToggle"
+  aria-label="Toggle light and dark theme"
+  title="Theme"
+>
+  <span class="theme-sun"><Icon name="sun" size={13} /></span>
+  <span class="theme-moon"><Icon name="moon" size={13} /></span>
+</button>
+<style>
+  .theme-moon { display: none; }
+  :global(html[data-theme='dark']) .theme-sun { display: none; }
+  :global(html[data-theme='dark']) .theme-moon { display: inline-flex; }
+  @media (prefers-color-scheme: dark) {
+    :global(html:not([data-theme])) .theme-sun { display: none; }
+    :global(html:not([data-theme])) .theme-moon { display: inline-flex; }
+    :global(html[data-theme='light']) .theme-sun { display: inline-flex; }
+    :global(html[data-theme='light']) .theme-moon { display: none; }
+  }
+</style>
+<script>
+  const btn = document.getElementById('themeToggle');
+  function current(): 'light' | 'dark' {
+    const attr = document.documentElement.getAttribute('data-theme');
+    if (attr === 'light' || attr === 'dark') return attr;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  btn?.addEventListener('click', () => {
+    const next = current() === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('funke-theme', next);
+  });
+</script>

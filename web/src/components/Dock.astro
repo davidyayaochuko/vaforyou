@@ -1,0 +1,144 @@
+---
+import Icon from './Icon.astro';
+import type { IconName } from '../lib/icons';
+import type { DockKey } from '../lib/dock';
+
+interface Props {
+  active?: DockKey | null;
+}
+const { active = null } = Astro.props;
+
+/** Flat dock faces — solid fill + glyph, no fake 3D. */
+const items: {
+  key: DockKey;
+  label: string;
+  icon: IconName;
+  color: string;
+}[] = [
+  {
+    key: 'apps',
+    label: 'Apps',
+    icon: 'apps',
+    color: '#3a3a3c',
+  },
+  {
+    key: 'chat',
+    label: 'Chat',
+    icon: 'chat',
+    color: '#2f6b4f',
+  },
+];
+---
+<div class="dock-wrap">
+  <nav aria-label="App dock" class="dock" id="dockShell">
+    {
+      items.map((item) => (
+        <button
+          type="button"
+          class:list={['dock-item', active === item.key && 'is-open']}
+          data-dock={item.key}
+          aria-label={item.label}
+          aria-current={active === item.key ? 'true' : undefined}
+        >
+          <span class="dock-tip">{item.label}</span>
+          <span class="dock-icon" style={`background: ${item.color}`}>
+            <span class="dock-glyph">
+              <Icon name={item.icon} size={24} />
+            </span>
+          </span>
+          <span class="dock-dot" aria-hidden="true" />
+        </button>
+      ))
+    }
+  </nav>
+</div>
+<script>
+  const shell = document.getElementById('dockShell');
+  if (!shell) {
+    // no-op
+  } else if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    shell.classList.add('dock--static');
+  } else {
+    const items = [...shell.querySelectorAll<HTMLElement>('.dock-item')];
+    let centers: number[] = [];
+    let shellLeft = 0;
+    let raf = 0;
+    let pendingX = 0;
+    let active = false;
+
+    // Two icons: tighter range, gentler scale
+    const maxScale = 1.28;
+    const range = 64;
+    const maxLift = 8;
+
+    const measure = () => {
+      const shellRect = shell.getBoundingClientRect();
+      shellLeft = shellRect.left;
+      centers = items.map((el) => {
+        const r = el.getBoundingClientRect();
+        return r.left + r.width / 2 - shellLeft;
+      });
+    };
+
+    const apply = (x: number) => {
+      let best = -1;
+      let bestW = 0;
+
+      items.forEach((el, i) => {
+        const cx = centers[i] ?? 0;
+        const d = Math.abs(x - cx);
+        const t = Math.max(0, 1 - d / range);
+        const w = t <= 0 ? 0 : 0.5 - 0.5 * Math.cos(t * Math.PI);
+        const s = 1 + (maxScale - 1) * w;
+        const lift = maxLift * w;
+
+        el.style.setProperty('--dock-scale', s.toFixed(4));
+        el.style.setProperty('--dock-lift', `${lift.toFixed(2)}px`);
+        el.style.zIndex = w > 0.02 ? String(Math.round(20 + w * 30)) : '';
+
+        if (w > bestW) {
+          bestW = w;
+          best = i;
+        }
+      });
+
+      items.forEach((el, i) => {
+        el.classList.toggle('is-hot', i === best && bestW > 0.35);
+      });
+    };
+
+    const reset = () => {
+      active = false;
+      shell.classList.remove('is-magnifying');
+      items.forEach((el) => {
+        el.style.setProperty('--dock-scale', '1');
+        el.style.setProperty('--dock-lift', '0px');
+        el.style.zIndex = '';
+        el.classList.remove('is-hot');
+      });
+    };
+
+    const onMove = (e: PointerEvent) => {
+      pendingX = e.clientX - shellLeft;
+      if (!raf) {
+        raf = requestAnimationFrame(() => {
+          raf = 0;
+          if (active) apply(pendingX);
+        });
+      }
+    };
+
+    const onEnter = () => {
+      measure();
+      active = true;
+      shell.classList.add('is-magnifying');
+    };
+
+    shell.addEventListener('pointerenter', onEnter);
+    shell.addEventListener('pointermove', onMove);
+    shell.addEventListener('pointerleave', reset);
+    window.addEventListener('resize', measure);
+
+    measure();
+  }
+</script>

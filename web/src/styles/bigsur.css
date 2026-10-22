@@ -1,0 +1,181 @@
+/**
+ * macOS design tokens for Funke web chrome.
+ * Specs from Apple HIG / menu-bar extras practice (24pt menu bar, 12pt traffic lights).
+ * Official kits: https://developer.apple.com/design/resources/
+ */
+
+:root {
+  /* System colors (light) */
+  --mac-label: #1d1d1f;
+  --mac-secondary-label: rgba(60, 60, 67, 0.6);
+  --mac-tertiary-label: rgba(60, 60, 67, 0.3);
+  --mac-quaternary-label: rgba(60, 60, 67, 0.18);
+  --mac-separator: rgba(0, 0, 0, 0.1);
+  --mac-fill: rgba(120, 120, 128, 0.2);
+  --mac-fill-secondary: rgba(120, 120, 128, 0.16);
+  --mac-fill-tertiary: rgba(120, 120, 128, 0.12);
+  --mac-blue: #007aff;
+  --mac-green: #34c759;
+  --mac-orange: #ff9500;
+  --mac-red: #ff3b30;
+  --mac-purple: #af52de;
+  --mac-teal: #5ac8fa;
+  --mac-gray: #8e8e93;
+
+  /* Traffic lights (exact) */
+  --mac-close: #ff5f57;
+  --mac-close-border: #e0443e;
+  --mac-min: #febc2e;
+  --mac-min-border: #dea123;
+  --mac-zoom: #28c840;
+  --mac-zoom-border: #1aab29;
+
+  /* Materials */
+  --mac-desktop: #c8ced8;
+  --mac-menubar: rgba(246, 246, 246, 0.72);
+  --mac-dock: rgba(255, 255, 255, 0.48);
+  --mac-window: rgba(246, 246, 246, 0.92);
+  --mac-widget: rgba(30, 30, 30, 0.55);
+  --mac-widget-label: #f5f5f7;
+  --mac-widget-secondary: rgba(235, 235, 245, 0.6);
+
+  --mac-accent: #2f6b4f;
+
+  /* Layout (pt ≈ css px at 1x) */
+  --menubar-h: 24px;
+  --titlebar-h: 28px;
+  --traffic: 12px;
+  --traffic-gap: 8px;
+  --traffic-inset: 8px;
+  --control-h: 22px;
+  --control-radius: 5px;
+  --window-radius: 10px;
+  --widget-radius: 20px;
+  /* Dock: Big Sur shelf (~50px icons, continuous-corner ~22.37%) */
+  --dock-pad-x: 12px;
+  --dock-pad-top: 6px;
+  --dock-pad-bottom: 12px; /* room for open indicators */
+  --dock-icon: 50px;
+  --dock-radius: 22.37%;
+  --dock-gap: 6px;
+  --dock-shelf-radius: 22px;
+  --dock-pad: 6px; /* legacy alias */
+
+  /* Aliases used across components */
+  --bs-desktop: var(--mac-desktop);
+  --bs-ink: var(--mac-label);
+  --bs-secondary: var(--mac-secondary-label);
+  --bs-tertiary: var(--mac-tertiary-label);
+  --bs-separator: var(--mac-separator);
+  --bs-fill: var(--mac-fill-tertiary);
+  --bs-blue: var(--mac-blue);
+  --bs-green: var(--mac-green);
+  --bs-orange: var(--mac-orange);
+  --bs-red: var(--mac-red);
+  --bs-gray: var(--mac-gray);
+  --bs-menubar: var(--mac-menubar);
+  --bs-dock: var(--mac-dock);
+  --bs-window: var(--mac-window);
+  --bs-widget: var(--mac-widget);
+  --bs-widget-ink: var(--mac-widget-label);
+  --bs-widget-mut: var(--mac-widget-secondary);
+  --bs-accent: var(--mac-accent);
+  --paper: var(--mac-desktop);
+  --ink: var(--mac-label);
+  --accent: var(--mac-accent);
+  --ghost: var(--mac-fill-tertiary);
+  --muted: var(--mac-secondary-label);
+  --line: var(--mac-separator);
+  --control-radius: 5px;
+  --icon-radius: var(--dock-radius);
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --mac-label: #f5f5f7;
+    --mac-secondary-label: rgba(235, 235, 245, 0.6);
+    --mac-tertiary-label: rgba(235, 235, 245, 0.3);
+    --mac-quaternary-label: rgba(235, 235, 245, 0.18);
+    --mac-separator: rgba(255, 255, 255, 0.15);
+    --mac-fill: rgba(120, 120, 128, 0.36);
+    --mac-fill-secondary: rgba(120, 120, 128, 0.32);
+    --mac-fill-tertiary: rgba(120, 120, 128, 0.24);
+    --mac-blue: #0a84ff;
+    --mac-green: #30d158;
+    --mac-orange: #ff9f0a;
+    --mac-red: #ff453a;
+    --mac-purple: #bf5af2;
+    --mac-teal: #64d2ff;
+    --mac-desktop: #1c1c1e;
+    --mac-menubar: rgba(40, 40, 40, 0.72);
+    --mac-dock: rgba(40, 40, 40, 0.5);
+    --mac-window: rgba(40, 40, 40, 0.92);
+    --mac-accent: #4caa74;
+    --bs-desktop: var(--mac-desktop);
+    --bs-ink: var(--mac-label);
+    --bs-secondary: var(--mac-secondary-label);
+    --bs-tertiary: var(--mac-tertiary-label);
+    --bs-separator: var(--mac-separator);
+    --bs-fill: var(--mac-fill-tertiary);
+    --bs-blue: var(--mac-blue);
+    --bs-green: var(--mac-green);
+    --bs-orange: var(--mac-orange);
+    --bs-red: var(--mac-red);
+    --bs-menubar: var(--mac-menubar);
+    --bs-dock: var(--mac-dock);
+    --bs-window: var(--mac-window);
+    --bs-accent: var(--mac-accent);
+    --paper: var(--mac-desktop);
+    --ink: var(--mac-label);
+    --accent: var(--mac-accent);
+    --ghost: var(--mac-fill-tertiary);
+    --muted: var(--mac-secondary-label);
+    --line: var(--mac-separator);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --mac-label: #f5f5f7;
+  --mac-secondary-label: rgba(235, 235, 245, 0.6);
+  --mac-tertiary-label: rgba(235, 235, 245, 0.3);
+  --mac-quaternary-label: rgba(235, 235, 245, 0.18);
+  --mac-separator: rgba(255, 255, 255, 0.15);
+  --mac-fill: rgba(120, 120, 128, 0.36);
+  --mac-fill-secondary: rgba(120, 120, 128, 0.32);
+  --mac-fill-tertiary: rgba(120, 120, 128, 0.24);
+  --mac-blue: #0a84ff;
+  --mac-green: #30d158;
+  --mac-orange: #ff9f0a;
+  --mac-red: #ff453a;
+  --mac-purple: #bf5af2;
+  --mac-teal: #64d2ff;
+  --mac-desktop: #1c1c1e;
+  --mac-menubar: rgba(40, 40, 40, 0.72);
+  --mac-dock: rgba(40, 40, 40, 0.5);
+  --mac-window: rgba(40, 40, 40, 0.92);
+  --mac-accent: #4caa74;
+  --bs-desktop: var(--mac-desktop);
+  --bs-ink: var(--mac-label);
+  --bs-secondary: var(--mac-secondary-label);
+  --bs-tertiary: var(--mac-tertiary-label);
+  --bs-separator: var(--mac-separator);
+  --bs-fill: var(--mac-fill-tertiary);
+  --bs-blue: var(--mac-blue);
+  --bs-green: var(--mac-green);
+  --bs-orange: var(--mac-orange);
+  --bs-red: var(--mac-red);
+  --bs-menubar: var(--mac-menubar);
+  --bs-dock: var(--mac-dock);
+  --bs-window: var(--mac-window);
+  --bs-accent: var(--mac-accent);
+  --paper: var(--mac-desktop);
+  --ink: var(--mac-label);
+  --accent: var(--mac-accent);
+  --ghost: var(--mac-fill-tertiary);
+  --muted: var(--mac-secondary-label);
+  --line: var(--mac-separator);
+  color-scheme: dark;
+}
