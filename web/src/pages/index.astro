@@ -1,0 +1,21 @@
+---
+import Layout from '../layouts/App.astro';
+import TopBar from '../components/TopBar.astro';
+import DesktopWidgets from '../components/DesktopWidgets.astro';
+import Dock from '../components/Dock.astro';
+import OrbStage from '../components/OrbStage';
+import PanelHost from '../components/PanelHost';
+---
+<Layout title="Funke">
+  <div class="desktop-shell">
+    <div class="desktop-stage">
+      <TopBar modelLabel="Groq · llama" engineOn={false} />
+      <main class="desktop-main">
+        <DesktopWidgets />
+        <OrbStage client:only="react" size={420} />
+      </main>
+      <Dock />
+    </div>
+    <PanelHost client:load />
+  </div>
+</Layout>

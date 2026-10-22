@@ -1,0 +1,75 @@
+---
+import Icon from './Icon.astro';
+import ThemeToggle from './ThemeToggle.astro';
+
+interface Props {
+  modelLabel?: string;
+  engineOn?: boolean;
+}
+const { modelLabel = 'Groq · llama', engineOn = false } = Astro.props;
+---
+<header class="topbar" role="banner">
+  <div class="topbar-left">
+    <a href="/" class="topbar-apple" aria-label="Funke home">
+      <Icon name="funke" size={14} />
+    </a>
+    <span class="topbar-app">Funke</span>
+  </div>
+
+  <div class="topbar-right">
+    <div class="topbar-status">
+      <span class="topbar-extra" id="modelChip" title="Active language model">
+        <span id="modelLabel">{modelLabel}</span>
+      </span>
+      <span
+        class="topbar-extra"
+        id="engineChip"
+        title="Social engine"
+        style="gap: 5px;"
+      >
+        <span
+          id="engineDot"
+          aria-hidden="true"
+          style={`
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: ${engineOn ? 'var(--mac-green)' : 'var(--mac-orange)'};
+            box-shadow: 0 0 0 0.5px rgba(0,0,0,0.15);
+          `}
+        ></span>
+        <span id="engineLabel">{engineOn ? 'Engine on' : 'Engine off'}</span>
+      </span>
+      <ThemeToggle />
+      <time id="clock" class="topbar-clock" datetime=""></time>
+    </div>
+  </div>
+</header>
+<script>
+  const el = document.getElementById('clock') as HTMLTimeElement | null;
+  function tick() {
+    if (!el) return;
+    const now = new Date();
+    el.dateTime = now.toISOString();
+    el.textContent = now.toLocaleString(undefined, {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  }
+  tick();
+  setInterval(tick, 30_000);
+</script>
+<style>
+  #modelLabel,
+  #engineLabel {
+    font-size: 12px;
+    letter-spacing: -0.08px;
+    white-space: nowrap;
+  }
+  @media (max-width: 820px) {
+    #modelLabel { display: none; }
+  }
+</style>

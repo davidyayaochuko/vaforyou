@@ -1,0 +1,25 @@
+---
+const now = new Date();
+const month = now.toLocaleString(undefined, { month: 'short' }).toUpperCase();
+const day = now.getDate();
+const weekday = now.toLocaleString(undefined, { weekday: 'long' });
+---
+<aside class="widgets" aria-label="Desktop widgets">
+  <div class="widget">
+    <p class="widget-kicker">{month}</p>
+    <p class="widget-title">{day}</p>
+    <p class="widget-meta">{weekday}</p>
+  </div>
+  <div class="widget">
+    <p class="widget-kicker">Today</p>
+    <p class="widget-title" style="font-size: 15px; font-weight: 600;">Funke</p>
+    <div class="widget-row">
+      <span>Approvals</span>
+      <span>0</span>
+    </div>
+    <div class="widget-row">
+      <span>Engine</span>
+      <span>Off</span>
+    </div>
+  </div>
+</aside>
