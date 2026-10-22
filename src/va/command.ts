@@ -33,6 +33,7 @@ import { remember, recall } from './memory.ts';
 import { replyStylePromptBlock } from './reply-style.ts';
 import { tryContextCommand, contextLabel, activeContext } from './contexts.ts';
 import { lookupKb } from './knowledge.ts';
+import { approvalToCard, listPendingApprovals } from '../guardrails/approvals.ts';
 
 export type VaIntent =
   | 'remind'
@@ -522,21 +523,38 @@ function defaultAccount(platform: string): string | null {
   return null;
 }
 
+function platformAccountLabel(platform: string): string {
+  if (platform === 'x') return 'X';
+  if (platform === 'bluesky') return 'Bluesky';
+  return 'LinkedIn';
+}
+
+/** Prefer a personal/default account when the user did not name one. */
+function pickDefaultAccount(
+  accounts: { name: string }[],
+): { name: string } | null {
+  if (!accounts.length) return null;
+  if (accounts.length === 1) return accounts[0]!;
+  const ranked = accounts.find((a) => /personal/i.test(a.name))
+    ?? accounts.find((a) => a.name.toLowerCase() === 'linkedin' || a.name.toLowerCase() === 'x' || a.name.toLowerCase() === 'bluesky')
+    ?? accounts[0]!;
+  return ranked;
+}
+
 /** Resolve "personal LinkedIn" / "company-page" / fuzzy names. */
 function resolveAccountName(raw: string | null | undefined, platform: string): {
   name: string | null;
   clarify?: string;
+  /** True when we chose a default because the user did not name an account. */
+  usedDefault?: boolean;
 } {
   const accounts = accountsForPlatform(platform);
   if (!accounts.length) return { name: null };
   if (!raw || !raw.trim()) {
-    if (accounts.length === 1) return { name: accounts[0]!.name };
-    return {
-      name: null,
-      clarify:
-        `Which ${platform === 'x' ? 'X' : 'LinkedIn'} account? `
-        + accounts.map((a) => a.name).join(', '),
-    };
+    const picked = pickDefaultAccount(accounts);
+    if (!picked) return { name: null };
+    // Voice and short asks rarely include an account name. Default, then say which.
+    return { name: picked.name, usedDefault: accounts.length > 1 };
   }
   const q = raw.trim().toLowerCase().replace(/\s+/g, ' ');
   const exact = accounts.find((a) => a.name.toLowerCase() === q);
@@ -546,15 +564,16 @@ function resolveAccountName(raw: string | null | undefined, platform: string): {
     return n.includes(q) || q.includes(n) || q.replace(/\s+/g, '-').includes(n) || n.includes(q.replace(/\s+/g, '-'));
   });
   if (fuzzy.length === 1) return { name: fuzzy[0]!.name };
-  if (fuzzy.length > 1 || accounts.length > 1) {
+  if (fuzzy.length > 1) {
     return {
       name: null,
       clarify:
-        `Which ${platform === 'x' ? 'X' : 'LinkedIn'} account? `
+        `Which ${platformAccountLabel(platform)} account? `
         + accounts.map((a) => a.name).join(', '),
     };
   }
-  return { name: accounts[0]!.name };
+  const picked = pickDefaultAccount(accounts);
+  return picked ? { name: picked.name, usedDefault: true } : { name: null };
 }
 
 export async function handleVaCommand(text: string): Promise<VaResult> {
@@ -1075,9 +1094,15 @@ function isStatusAsk(text: string): boolean {
   return (
     /\b(what('|’)?s|whats|what is)\s+on\s+my\s+plate\b/i.test(t)
     || /\b(what('|’)?s|whats|what is|what are)\s+(on\s+)?(my\s+)?(calendar|schedule|meetings?)\b/i.test(t)
+    || /\b(show|tell|list|what)\b.+\b(my\s+)?(calendar|schedule|meetings?)\b/i.test(t)
+    || /\b(reminders?)\b.+\b(have|open|upcoming|scheduled|list|show)\b/i.test(t)
+    || /\b(have|open|upcoming|scheduled|list|show)\b.+\b(reminders?)\b/i.test(t)
+    || /\b(approval|approvals)\b/i.test(t)
+    || /\bwaiting on (my )?approval\b/i.test(t)
     || /\b(wetin dey|wetin dey for)\s+(my\s+)?plate\b/i.test(t)
     || /^(status|overview|catch me up|plate)\b/i.test(t)
     || /^what did i miss\??$/i.test(t)
+    || /\bplate now\b/i.test(t)
   );
 }
 
@@ -1428,23 +1453,30 @@ function parseDraftAsk(text: string): ParsedCommand | null {
     }
   }
   const m = t.match(
-    /^(?:please\s+)?(?:draft|write|compose)\s+(?:an?\s+)?(?:(linkedin|twitter|x)\s+)?(?:post|update)\s+(?:about|on|for)\s+(.+)$/i,
+    /^(?:please\s+)?(?:draft|write|compose)\s+(?:an?\s+)?(?:(linkedin|twitter|x|bluesky|bsky)\s+)?(?:post|update)\s+(?:about|on|for)\s+(.+)$/i,
   );
   if (!m) return null;
   const platformRaw = (m[1] || 'linkedin').toLowerCase();
-  const platform = platformRaw === 'twitter' || platformRaw === 'x' ? 'x' : 'linkedin';
+  const platform =
+    platformRaw === 'twitter' || platformRaw === 'x'
+      ? 'x'
+      : platformRaw === 'bluesky' || platformRaw === 'bsky'
+        ? 'bluesky'
+        : 'linkedin';
   const brief = m[2]!.trim().replace(/[.?!]+$/, '');
   if (brief.length < 3) return null;
   let account: string | null = null;
   let briefClean = brief;
   const acct = brief.match(/^(?:for\s+)?([a-z0-9._-]+)\s+(?:about|on)\s+(.+)$/i);
-  if (acct && /linkedin|personal|company|brand|page/i.test(acct[1]!)) {
+  if (acct && /linkedin|personal|company|brand|page|bluesky|bsky/i.test(acct[1]!)) {
     account = acct[1]!;
     briefClean = acct[2]!.trim();
   }
+  const platformLabel =
+    platform === 'x' ? 'Twitter/X' : platform === 'bluesky' ? 'Bluesky' : 'LinkedIn';
   return {
     intent: 'draft_post',
-    reply: `Drafting a ${platform === 'x' ? 'Twitter/X' : 'LinkedIn'} post about that.`,
+    reply: `Drafting a ${platformLabel} post about that.`,
     needs_clarification: false,
     draft: { platform, account, brief: briefClean, facts: null },
   };
@@ -1456,9 +1488,16 @@ async function runDraft(parsed: ParsedCommand): Promise<VaResult> {
     return { ok: false, intent: 'draft_post', reply: parsed.reply || 'Tell me what the post should be about.' };
   }
 
-  const platform = (d.platform || 'linkedin').toLowerCase().replace('twitter', 'x');
-  if (!isPlatformId(platform) || (platform !== 'linkedin' && platform !== 'x')) {
-    return { ok: false, intent: 'draft_post', reply: `Platform must be linkedin or x (got "${d.platform}").` };
+  const platform = (d.platform || 'linkedin')
+    .toLowerCase()
+    .replace('twitter', 'x')
+    .replace(/^bsky$/, 'bluesky');
+  if (!isPlatformId(platform)) {
+    return {
+      ok: false,
+      intent: 'draft_post',
+      reply: `Platform must be linkedin, x, or bluesky (got "${d.platform}").`,
+    };
   }
 
   const resolved = resolveAccountName(d.account, platform);
@@ -1466,6 +1505,9 @@ async function runDraft(parsed: ParsedCommand): Promise<VaResult> {
     return { ok: true, intent: 'draft_post', reply: resolved.clarify };
   }
   const accountName = resolved.name;
+  const defaultNote = resolved.usedDefault
+    ? `Using ${accountName} (say another ${platformAccountLabel(platform)} account if you want a different one).`
+    : '';
   if (!accountName) {
     return { ok: false, intent: 'draft_post', reply: `No ${platform} account connected.` };
   }
@@ -1485,7 +1527,7 @@ async function runDraft(parsed: ParsedCommand): Promise<VaResult> {
     // user-supplied exact text is gated for length/banned words, then still needs Approve.
     const { gate } = await import('../content/gate.ts');
     const g = gate({
-      platform: platform as 'linkedin' | 'x',
+      platform,
       kind: 'post',
       body: exactBody,
       provenance: 'founder_approved',
@@ -1562,13 +1604,14 @@ async function runDraft(parsed: ParsedCommand): Promise<VaResult> {
     intent: 'draft_post',
     reply: [
       parsed.reply?.trim() || 'Here is a draft.',
+      defaultNote,
       '',
-      exactBody ? body : '',
-      exactBody ? '' : undefined,
+      exactBody ? body : body,
+      '',
       `Draft #${row.id} for ${accountName} (${platform}).`,
       'Approve queues this exact text (Ok tab). Nothing posts until you approve and you start the social engine. Voice cannot approve.',
     ]
-      .filter((line) => line !== undefined)
+      .filter((line) => line !== undefined && line !== '')
       .filter((line, i, arr) => !(line === '' && arr[i - 1] === ''))
       .join('\n'),
     detail: {
@@ -1638,17 +1681,21 @@ function clockLabel(iso: string): string {
 function runStatus(parsed: ParsedCommand): VaResult {
   const lastUser = [...recentTurns(4)].reverse().find((t) => t.role === 'user')?.text ?? '';
   const ask = `${lastUser}\n${parsed.reply || ''}`;
-  const wantTomorrow = /\btomorrow\b/i.test(ask);
-  const wantMeetings = /\b(meeting|meetings|calendar|schedule|what's on|whats on)\b/i.test(ask)
-    || wantTomorrow;
-  const wantReminders = /\breminders?\b/i.test(ask) && !wantMeetings;
+  const wantTomorrow = /\btomorrow\b/i.test(ask) && !/\b(this\s+week|week)\b/i.test(ask);
+  const wantWeek = /\b(this\s+)?week\b/i.test(ask);
+  const wantApprovals = /\b(approval|approvals)\b/i.test(ask) || /\bwaiting on (my )?approval\b/i.test(ask);
+  const wantMeetings = /\b(meeting|meetings|calendar|schedule)\b/i.test(ask) || wantWeek;
+  const wantReminders =
+    (/\breminders?\b/i.test(ask) || /\bopen ones\b/i.test(ask)) && !wantMeetings;
   const wantFollowups = /\bfollow-?ups?\b/i.test(ask);
-  const wantAccounts = /\b(linkedin|twitter|\bx\b|accounts?|connected)\b/i.test(ask);
-  const wantPlate = /\b(on my plate|overview|status|everything|catch me up)\b/i.test(ask);
+  const wantAccounts = /\b(linkedin|twitter|\bx\b|bluesky|accounts?|connected)\b/i.test(ask);
+  const wantPlate =
+    /\b(on my plate|overview|status|everything|catch me up|plate now)\b/i.test(ask);
   const greets = /\b(hi|hello|hey|how are you|how's it going)\b/i.test(lastUser);
 
-  const focus: 'meetings' | 'reminders' | 'followups' | 'accounts' | 'plate' =
-    wantAccounts && !wantMeetings && !wantPlate ? 'accounts'
+  const focus: 'meetings' | 'reminders' | 'followups' | 'accounts' | 'approvals' | 'plate' =
+    wantApprovals && !wantPlate ? 'approvals'
+    : wantAccounts && !wantMeetings && !wantPlate ? 'accounts'
     : wantFollowups && !wantPlate ? 'followups'
     : wantReminders ? 'reminders'
     : wantMeetings && !wantPlate ? 'meetings'
@@ -1688,10 +1735,39 @@ function runStatus(parsed: ParsedCommand): VaResult {
     when: friendlyWhen(f.due_at),
   }));
 
+  if (focus === 'approvals') {
+    const pending = listPendingApprovals(20);
+    if (!pending.length) lines.push('Nothing waiting on your approval.');
+    else {
+      lines.push(`Approvals waiting (${pending.length}):`);
+      for (const a of pending) {
+        const card = approvalToCard(a);
+        lines.push(`• ${card.title}`);
+      }
+      lines.push('', 'Open Approvals to approve or reject. Voice cannot approve.');
+    }
+    return {
+      ok: true,
+      intent: 'status',
+      reply: lines.join('\n').trim(),
+      detail: { focus, approvals: pending.map((a) => approvalToCard(a)) },
+    };
+  }
+
   if (focus === 'meetings') {
-    const heading = wantTomorrow ? "Tomorrow's meetings" : 'Upcoming meetings';
+    const heading = wantTomorrow
+      ? "Tomorrow's meetings"
+      : wantWeek
+        ? "This week's calendar"
+        : 'Upcoming meetings';
     if (!events.length) {
-      lines.push(wantTomorrow ? 'Nothing on the calendar for tomorrow.' : 'Nothing coming up on the calendar.');
+      lines.push(
+        wantTomorrow
+          ? 'Nothing on the calendar for tomorrow.'
+          : wantWeek
+            ? 'Nothing on the calendar for this week.'
+            : 'Nothing coming up on the calendar.',
+      );
     } else {
       lines.push(`${heading} (${events.length}):`);
       for (const e of events) {

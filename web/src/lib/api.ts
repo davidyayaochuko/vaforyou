@@ -61,18 +61,35 @@ type AskResponse = {
 
 export type AskResult = { reply: string; approvals: ApprovalCard[] };
 
+function isRateLimitedReply(reply: string): boolean {
+  return /rate limit|busy right now|try the same ask again|tokens per minute|\b429\b/i.test(reply);
+}
+
+/** Ask Funke, with a short backoff when the AI provider is rate-limiting. */
 export async function askFunkeDetailed(text: string): Promise<AskResult> {
-  const data = await api<AskResponse>('/api/ask', 'POST', { text });
-  const reply =
-    typeof data.reply === 'string' && data.reply.trim()
-      ? data.reply
-      : 'I heard you, but I could not form a reply. Try again in a moment.';
-  const approvals =
-    data.detail?.approvals ?? (data.detail?.approval ? [data.detail.approval] : []);
-  if (approvals.length && typeof window !== 'undefined') {
+  const delays = [0, 2500, 6000, 12000];
+  let last: AskResult = { reply: '', approvals: [] };
+  for (let i = 0; i < delays.length; i++) {
+    if (delays[i]) await new Promise((r) => setTimeout(r, delays[i]));
+    const data = await api<AskResponse>('/api/ask', 'POST', { text });
+    const reply =
+      typeof data.reply === 'string' && data.reply.trim()
+        ? data.reply
+        : 'I heard you, but I could not form a reply. Try again in a moment.';
+    const approvals =
+      data.detail?.approvals ?? (data.detail?.approval ? [data.detail.approval] : []);
+    last = { reply, approvals };
+    if (!isRateLimitedReply(reply)) {
+      if (approvals.length && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('funke:approvals-changed'));
+      }
+      return last;
+    }
+  }
+  if (last.approvals.length && typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('funke:approvals-changed'));
   }
-  return { reply, approvals };
+  return last;
 }
 
 export async function askFunke(text: string): Promise<string> {

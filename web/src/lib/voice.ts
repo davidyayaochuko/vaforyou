@@ -387,8 +387,13 @@ class VoiceEngine {
       const approvalNote = approvals.length ? 'Something needs your approval. Tap Approvals.' : '';
       this.set({ reply, notice: approvalNote });
       // Conversation always hears the reply; hold uses an open mic or Speak toggle.
+      // Harness can set window.__funkeMuteSpeak to skip TTS while still testing modes.
+      const mute =
+        typeof window !== 'undefined' &&
+        !!(window as unknown as { __funkeMuteSpeak?: boolean }).__funkeMuteSpeak;
       const shouldSpeak =
-        this.snap.talkMode === 'conversation' || this.snap.talkOn || this.snap.speakOn;
+        !mute &&
+        (this.snap.talkMode === 'conversation' || this.snap.talkOn || this.snap.speakOn);
       if (shouldSpeak) await this.speak(reply, approvals.length > 0);
     } catch (err) {
       this.set({ notice: err instanceof Error ? err.message : 'I could not reach Funke.' });
@@ -511,5 +516,18 @@ let engine: VoiceEngine | null = null;
 /** Shared engine across islands (orb, chat). Browser only. */
 export function voice(): VoiceEngine {
   if (!engine) engine = new VoiceEngine();
+  if (typeof window !== 'undefined') {
+    (window as unknown as { __funkeVoice?: VoiceEngine }).__funkeVoice = engine;
+  }
   return engine;
+}
+
+/**
+ * Test/harness helper: run a spoken turn without mic audio (skips STT).
+ * Still respects talkMode lifecycle used by Space hold and Talk conversation.
+ */
+export async function simulateSpokenTurn(text: string): Promise<string> {
+  const v = voice();
+  await v.ask(text);
+  return v.snapshot.reply;
 }

@@ -55,7 +55,29 @@ export default function OrbStage({ size = 400 }: Props) {
   const spaceHeld = useRef(false);
   const orbHeld = useRef(false);
 
-  useEffect(() => voice().subscribe(setSnap), []);
+  useEffect(() => {
+    const v = voice(); // also publishes window.__funkeVoice for harness / debug
+    return v.subscribe(setSnap);
+  }, []);
+
+  // Optional QA harness: /?harness=1 runs all four personas across both voice modes.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (new URLSearchParams(window.location.search).get('harness') !== '1') return;
+    let cancelled = false;
+    void import('../lib/personaHarness').then(async ({ installPersonaHarness, runPersonaHarness }) => {
+      installPersonaHarness();
+      if (cancelled) return;
+      const summary = await runPersonaHarness();
+      if (!cancelled) {
+        (window as unknown as { __funkePersonaSummary?: unknown }).__funkePersonaSummary = summary;
+        console.info('[funke harness]', summary);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Space: push-to-talk only when not already in a conversation session.
   useEffect(() => {
