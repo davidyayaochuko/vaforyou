@@ -5,21 +5,65 @@ const day = now.getDate();
 const weekday = now.toLocaleString(undefined, { weekday: 'long' });
 ---
 <aside class="widgets" aria-label="Desktop widgets">
-  <div class="widget">
+  <button type="button" class="widget widget--calendar" data-dock="calendar" aria-label="Open Calendar">
     <p class="widget-kicker">{month}</p>
     <p class="widget-title">{day}</p>
-    <p class="widget-meta">{weekday}</p>
-  </div>
-  <div class="widget">
+    <p class="widget-meta" id="widgetNext">{weekday}</p>
+  </button>
+  <div class="widget widget--pulse">
     <p class="widget-kicker">Today</p>
-    <p class="widget-title" style="font-size: 15px; font-weight: 600;">Funke</p>
-    <div class="widget-row">
+    <p class="widget-title widget-title--sm">At a glance</p>
+    <button type="button" class="widget-row widget-row--link" data-dock="tasks">
+      <span>Reminders</span>
+      <span id="widgetReminders">·</span>
+    </button>
+    <button type="button" class="widget-row widget-row--link" data-dock="approvals">
       <span>Approvals</span>
-      <span>0</span>
-    </div>
-    <div class="widget-row">
-      <span>Engine</span>
-      <span>Off</span>
-    </div>
+      <span id="widgetApprovals">·</span>
+    </button>
+    <button type="button" class="widget-row widget-row--link" data-dock="socials">
+      <span>Social engine</span>
+      <span id="widgetEngine">Off</span>
+    </button>
+    <button type="button" class="widget-cta" data-dock="chat">Ask Funke</button>
   </div>
 </aside>
+<script>
+  const OPEN = new Set(['scheduled', 'pending', 'open', 'due', 'snoozed']);
+
+  function set(id: string, text: string) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  }
+
+  async function json(path: string): Promise<any | null> {
+    try {
+      const res = await fetch(path);
+      return res.ok ? await res.json() : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function refreshWidgets() {
+    const [health, status, approvals] = await Promise.all([
+      json('/api/health'),
+      json('/api/va/status'),
+      json('/api/approvals'),
+    ]);
+    if (health) set('widgetEngine', health.engine?.running ? (health.engine?.paused ? 'Paused' : 'On') : 'Off');
+    if (status) {
+      const open = (Array.isArray(status.reminders) ? status.reminders : []).filter(
+        (r: { state?: string }) => !r.state || OPEN.has(r.state),
+      );
+      set('widgetReminders', String(open.length));
+      const next = Array.isArray(status.events) ? status.events[0] : null;
+      if (next?.title) set('widgetNext', `Next: ${String(next.title).slice(0, 22)}`);
+    }
+    set('widgetApprovals', Array.isArray(approvals) ? String(approvals.length) : '·');
+  }
+
+  refreshWidgets();
+  setInterval(refreshWidgets, 30_000);
+  window.addEventListener('funke:approvals-changed', refreshWidgets);
+</script>

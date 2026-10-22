@@ -1,45 +1,42 @@
-import { APPS, type AppKey } from '../lib/dock';
-import { icons, type IconName } from '../lib/icons';
+import { APPS, type AppGroup, type AppKey } from '../lib/dock';
+import { IconTile } from './Icon';
 
 type Props = {
   onOpenApp: (key: AppKey) => void;
 };
 
-function Glyph({ name }: { name: IconName }) {
-  return (
-    <svg width={20} height={20} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d={icons[name]} fillRule="evenodd" />
-    </svg>
-  );
-}
+const GROUPS: AppGroup[] = ['Everyday', 'Communication', 'Coming soon'];
 
-/** Launcher: list of things Funke can do. Picking one opens that panel. */
+/** Launcher: a grid of everything Funke can do, grouped by area. */
 export default function AppsPanel({ onOpenApp }: Props) {
   return (
     <div className="apps-panel">
       <p className="apps-lead">What do you want to do?</p>
-      <ul className="apps-list">
-        {APPS.map((app) => (
-          <li key={app.key}>
-            <button
-              type="button"
-              className="apps-row"
-              onClick={() => onOpenApp(app.key)}
-            >
-              <span className="apps-row-icon" style={{ background: app.color }} aria-hidden>
-                <Glyph name={app.key} />
-              </span>
-              <span className="apps-row-copy">
-                <span className="apps-row-title">{app.title}</span>
-                <span className="apps-row-blurb">{app.blurb}</span>
-              </span>
-              <span className="apps-row-chev" aria-hidden>
-                ›
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
+      {GROUPS.map((group) => {
+        const apps = APPS.filter((a) => a.group === group);
+        if (!apps.length) return null;
+        return (
+          <section key={group} className="apps-group">
+            <h4 className="apps-group-title">{group}</h4>
+            <ul className="apps-grid">
+              {apps.map((app, i) => (
+                <li key={app.key} style={{ animationDelay: `${i * 35}ms` }}>
+                  <button
+                    type="button"
+                    className={`apps-cell${app.live ? '' : ' is-soon'}`}
+                    onClick={() => onOpenApp(app.key)}
+                    title={app.blurb}
+                  >
+                    <IconTile name={app.icon} face={app.key} size={56} className="apps-cell-tile" />
+                    <span className="apps-cell-title">{app.title}</span>
+                    <span className="apps-cell-blurb">{app.blurb}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })}
     </div>
   );
 }

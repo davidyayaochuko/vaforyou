@@ -1,6 +1,6 @@
 ---
 import Icon from './Icon.astro';
-import type { IconName } from '../lib/icons';
+import { iconFaces, type IconName } from '../lib/icons';
 import type { DockKey } from '../lib/dock';
 
 interface Props {
@@ -8,51 +8,90 @@ interface Props {
 }
 const { active = null } = Astro.props;
 
-/** Flat dock faces — solid fill + glyph, no fake 3D. */
 const items: {
   key: DockKey;
   label: string;
   icon: IconName;
-  color: string;
+  hint: string;
 }[] = [
   {
     key: 'apps',
     label: 'Apps',
     icon: 'apps',
-    color: '#3a3a3c',
+    hint: 'Everything Funke can do (Ctrl/⌘ 1)',
   },
   {
     key: 'chat',
     label: 'Chat',
     icon: 'chat',
-    color: '#2f6b4f',
+    hint: 'Ask Funke in plain English (Ctrl/⌘ K)',
+  },
+  {
+    key: 'calendar',
+    label: 'Calendar',
+    icon: 'calendar',
+    hint: 'Your upcoming events (Ctrl/⌘ 3)',
+  },
+  {
+    key: 'approvals',
+    label: 'Approvals',
+    icon: 'approvals',
+    hint: 'Drafts waiting for your yes (Ctrl/⌘ 4)',
   },
 ];
 ---
 <div class="dock-wrap">
   <nav aria-label="App dock" class="dock" id="dockShell">
     {
-      items.map((item) => (
-        <button
-          type="button"
-          class:list={['dock-item', active === item.key && 'is-open']}
-          data-dock={item.key}
-          aria-label={item.label}
-          aria-current={active === item.key ? 'true' : undefined}
-        >
-          <span class="dock-tip">{item.label}</span>
-          <span class="dock-icon" style={`background: ${item.color}`}>
-            <span class="dock-glyph">
-              <Icon name={item.icon} size={24} />
+      items.map((item) => {
+        const face = iconFaces[item.key] ?? iconFaces.funke!;
+        return (
+          <button
+            type="button"
+            class:list={['dock-item', active === item.key && 'is-open']}
+            data-dock={item.key}
+            aria-label={item.label}
+            title={item.hint}
+            aria-current={active === item.key ? 'true' : undefined}
+          >
+            <span class="dock-tip">{item.label}</span>
+            <span
+              class="dock-icon icon-tile"
+              style={`background: linear-gradient(160deg, ${face.from} 0%, ${face.to} 100%)`}
+            >
+              <span class="icon-tile-sheen" aria-hidden="true" />
+              <span class="dock-glyph">
+                <Icon name={item.icon} size={24} />
+              </span>
             </span>
-          </span>
-          <span class="dock-dot" aria-hidden="true" />
-        </button>
-      ))
+            {item.key === 'approvals' ? <span class="dock-badge" data-approvals-badge hidden /> : null}
+            <span class="dock-dot" aria-hidden="true" />
+          </button>
+        );
+      })
     }
   </nav>
 </div>
 <script>
+  const badge = document.querySelector<HTMLElement>('[data-approvals-badge]');
+  const refreshBadge = async () => {
+    if (!badge) return;
+    try {
+      const res = await fetch('/api/approvals');
+      if (!res.ok) throw new Error(String(res.status));
+      const rows = (await res.json()) as unknown[];
+      const n = Array.isArray(rows) ? rows.length : 0;
+      badge.textContent = n > 9 ? '9+' : String(n);
+      badge.hidden = n === 0;
+      badge.closest('.dock-item')?.setAttribute('aria-label', n ? `Approvals, ${n} waiting` : 'Approvals');
+    } catch {
+      badge.hidden = true;
+    }
+  };
+  void refreshBadge();
+  window.setInterval(refreshBadge, 30_000);
+  window.addEventListener('funke:approvals-changed', () => void refreshBadge());
+
   const shell = document.getElementById('dockShell');
   if (!shell) {
     // no-op
@@ -66,10 +105,9 @@ const items: {
     let pendingX = 0;
     let active = false;
 
-    // Two icons: tighter range, gentler scale
-    const maxScale = 1.28;
-    const range = 64;
-    const maxLift = 8;
+    const maxScale = 1.34;
+    const range = 72;
+    const maxLift = 12;
 
     const measure = () => {
       const shellRect = shell.getBoundingClientRect();

@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { icons } from '../lib/icons';
+import { askFunkeDetailed } from '../lib/api';
+import { pendingTurns, voice, type VoiceSnapshot, type VoiceTurn } from '../lib/voice';
+import { Glyph } from './Icon';
+
+const SUGGESTIONS = [
+  'What’s on my plate today?',
+  'Remind me tomorrow at 9am to send the deck',
+  'Draft a LinkedIn post about our launch',
+  'What did I miss?',
+];
 
 type Role = 'user' | 'assistant';
 
@@ -8,6 +17,7 @@ type Message = {
   role: Role;
   content: string;
   createdAt: number;
+  via?: 'voice';
 };
 
 type Thread = {
@@ -34,47 +44,9 @@ function seedThreads(): Thread[] {
         {
           id: 'm1',
           role: 'assistant',
-          content: 'Hi. What’s on your plate?',
-          createdAt: now - 60_000,
-        },
-      ],
-    },
-    {
-      id: 't_draft',
-      title: 'LinkedIn draft review',
-      updatedAt: now - 86_400_000,
-      messages: [
-        {
-          id: 'm2',
-          role: 'user',
-          content: 'Draft a short LinkedIn post about shipping the Funke home shell.',
-          createdAt: now - 86_400_000,
-        },
-        {
-          id: 'm3',
-          role: 'assistant',
           content:
-            'Here’s a draft. Nothing queues until you approve.\n\nShipped a macOS-style home for Funke today: voice orb front and center, dock apps for chat and approvals. Still local-only. Still gate-first.',
-          createdAt: now - 86_390_000,
-        },
-      ],
-    },
-    {
-      id: 't_cal',
-      title: 'Friday reminders',
-      updatedAt: now - 172_800_000,
-      messages: [
-        {
-          id: 'm4',
-          role: 'user',
-          content: 'Remind me Friday 9am to review approvals.',
-          createdAt: now - 172_800_000,
-        },
-        {
-          id: 'm5',
-          role: 'assistant',
-          content: 'Noted for Friday 09:00. Calendar wiring is next; this stays local until then.',
-          createdAt: now - 172_790_000,
+            'Hi. What’s on your plate? Reminders, drafts, and calendar are fair game. Nothing publishes without your approval.',
+          createdAt: now - 60_000,
         },
       ],
     },
@@ -114,14 +86,6 @@ function exportMarkdown(thread: Thread) {
   URL.revokeObjectURL(url);
 }
 
-function Glyph({ name, size = 14 }: { name: keyof typeof icons; size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d={icons[name]} fillRule="evenodd" />
-    </svg>
-  );
-}
-
 type Props = {
   onClose?: () => void;
 };
@@ -136,8 +100,62 @@ export default function ChatPanel({ onClose }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [voiceSnap, setVoiceSnap] = useState<VoiceSnapshot | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
+
+  useEffect(() => voice().subscribe(setVoiceSnap), []);
+
+  // Prefill from other panels ("Try in Chat" chips).
+  useEffect(() => {
+    const w = window as unknown as { __funkePrefill?: string };
+    const take = () => {
+      if (w.__funkePrefill) {
+        setDraft(w.__funkePrefill);
+        w.__funkePrefill = undefined;
+        window.setTimeout(() => inputRef.current?.focus(), 30);
+      }
+    };
+    take();
+    window.addEventListener('funke:open', take);
+    return () => window.removeEventListener('funke:open', take);
+  }, []);
+
+  // Voice turns from the orb land in the open thread.
+  useEffect(() => {
+    const onTurn = () => {
+      const queue = pendingTurns();
+      if (!queue.length) return;
+      const turns: VoiceTurn[] = queue.splice(0, queue.length);
+      const id = activeIdRef.current;
+      const now = Date.now();
+      setThreads((prev) =>
+        prev.map((t) => {
+          if (t.id !== id) return t;
+          const messages: Message[] = [
+            ...t.messages,
+            ...turns.flatMap((turn, i): Message[] => [
+              { id: uid('m'), role: 'user', content: turn.user, createdAt: now + i * 2, via: 'voice' },
+              { id: uid('m'), role: 'assistant', content: turn.reply, createdAt: now + i * 2 + 1 },
+            ]),
+          ];
+          return {
+            ...t,
+            updatedAt: now,
+            title: t.title === 'New chat' || t.title === 'Getting started' ? titleFromMessages(messages) : t.title,
+            messages,
+          };
+        }),
+      );
+    };
+    onTurn();
+    window.addEventListener('funke:turn', onTurn);
+    return () => window.removeEventListener('funke:turn', onTurn);
+  }, []);
 
   const active = useMemo(
     () => threads.find((t) => t.id === activeId) ?? threads[0] ?? null,
@@ -180,7 +198,7 @@ export default function ChatPanel({ onClose }: Props) {
         {
           id: uid('m'),
           role: 'assistant',
-          content: 'Hi. What’s on your plate?',
+          content: 'Hi. What’s on your plate? Reminders, drafts and calendar are fair game. Nothing publishes without your approval.',
           createdAt: Date.now(),
         },
       ],
@@ -206,47 +224,96 @@ export default function ChatPanel({ onClose }: Props) {
     setMenuOpen(false);
   };
 
-  const send = () => {
-    const text = draft.trim();
-    if (!text || !active) return;
+  const patchThread = (id: string, fn: (t: Thread) => Thread) => {
+    setThreads((prev) =>
+      prev.map((t) => (t.id === id ? fn({ ...t, updatedAt: Date.now() }) : t)),
+    );
+  };
+
+  const send = async (override?: string) => {
+    const text = (override ?? draft).trim();
+    if (!text || !active || sending) return;
+    const threadId = active.id;
     const userMsg: Message = {
       id: uid('m'),
       role: 'user',
       content: text,
       createdAt: Date.now(),
     };
-    // Shell stub reply — API wiring later
-    const reply: Message = {
-      id: uid('m'),
-      role: 'assistant',
-      content:
-        'Got it. Chat is still a shell — nothing leaves this machine, and nothing queues without your approval.',
-      createdAt: Date.now() + 1,
-    };
-    updateActive((t) => {
-      const messages = [...t.messages, userMsg, reply];
+    patchThread(threadId, (t) => {
+      const messages = [...t.messages, userMsg];
       return {
         ...t,
-        title: t.title === 'New chat' || t.title === 'Getting started' ? titleFromMessages(messages) : t.title,
+        title:
+          t.title === 'New chat' || t.title === 'Getting started'
+            ? titleFromMessages(messages)
+            : t.title,
         messages,
       };
     });
     setDraft('');
+    setSending(true);
+    try {
+      const { reply: replyText, approvals } = await askFunkeDetailed(text);
+      if (voice().snapshot.speakOn) void voice().speak(replyText, approvals.length > 0);
+      patchThread(threadId, (t) => ({
+        ...t,
+        messages: [
+          ...t.messages,
+          { id: uid('m'), role: 'assistant', content: replyText, createdAt: Date.now() },
+        ],
+      }));
+    } catch (err) {
+      patchThread(threadId, (t) => ({
+        ...t,
+        messages: [
+          ...t.messages,
+          {
+            id: uid('m'),
+            role: 'assistant',
+            content:
+              err instanceof Error
+                ? `I couldn’t reach the Funke server (${err.message}). Is npm run start up on :4310?`
+                : 'I couldn’t reach the Funke server. Is npm run start up on :4310?',
+            createdAt: Date.now(),
+          },
+        ],
+      }));
+    } finally {
+      setSending(false);
+    }
   };
 
-  const retryAssistant = (msgId: string) => {
-    updateActive((t) => {
-      const idx = t.messages.findIndex((m) => m.id === msgId);
-      if (idx < 0 || t.messages[idx]?.role !== 'assistant') return t;
-      const next = [...t.messages];
-      next[idx] = {
-        ...next[idx]!,
-        content:
-          'Retried locally. Same gate rules: approve before anything publishes.',
-        createdAt: Date.now(),
-      };
-      return { ...t, messages: next };
-    });
+  const retryAssistant = async (msgId: string) => {
+    if (sending || !active) return;
+    const idx = active.messages.findIndex((m) => m.id === msgId);
+    if (idx < 0 || active.messages[idx]?.role !== 'assistant') return;
+    const prior = [...active.messages.slice(0, idx)].reverse().find((m) => m.role === 'user');
+    if (!prior) return;
+    setSending(true);
+    try {
+      const { reply: replyText } = await askFunkeDetailed(prior.content);
+      updateActive((t) => {
+        const next = [...t.messages];
+        next[idx] = { ...next[idx]!, content: replyText, createdAt: Date.now() };
+        return { ...t, messages: next };
+      });
+    } catch (err) {
+      updateActive((t) => {
+        const next = [...t.messages];
+        next[idx] = {
+          ...next[idx]!,
+          content:
+            err instanceof Error
+              ? `Retry failed (${err.message}).`
+              : 'Retry failed. Check that the server is running.',
+          createdAt: Date.now(),
+        };
+        return { ...t, messages: next };
+      });
+    } finally {
+      setSending(false);
+    }
   };
 
   const startEdit = (msg: Message) => {
@@ -414,7 +481,14 @@ export default function ChatPanel({ onClose }: Props) {
           {active.messages.map((m) => (
             <article key={m.id} className={`chat-bubble chat-bubble--${m.role}`}>
               <header className="chat-bubble-head">
-                <span>{m.role === 'assistant' ? 'Funke' : 'You'}</span>
+                <span>
+                  {m.role === 'assistant' ? 'Funke' : 'You'}
+                  {m.via === 'voice' ? (
+                    <span className="chat-via" title="Spoken">
+                      <Glyph name="mic" size={9} />
+                    </span>
+                  ) : null}
+                </span>
                 <time dateTime={new Date(m.createdAt).toISOString()}>
                   {new Date(m.createdAt).toLocaleTimeString(undefined, {
                     hour: 'numeric',
@@ -456,15 +530,26 @@ export default function ChatPanel({ onClose }: Props) {
                       <span>Edit</span>
                     </button>
                   ) : (
-                    <button
-                      type="button"
-                      className="chat-mini"
-                      onClick={() => retryAssistant(m.id)}
-                      title="Retry"
-                    >
-                      <Glyph name="retry" size={12} />
-                      <span>Retry</span>
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        className="chat-mini"
+                        onClick={() => void voice().speak(m.content)}
+                        title="Read aloud"
+                      >
+                        <Glyph name="speak" size={12} />
+                        <span>Read</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="chat-mini"
+                        onClick={() => void retryAssistant(m.id)}
+                        title="Retry"
+                      >
+                        <Glyph name="retry" size={12} />
+                        <span>Retry</span>
+                      </button>
+                    </>
                   )}
                 </div>
               ) : null}
@@ -472,11 +557,22 @@ export default function ChatPanel({ onClose }: Props) {
           ))}
         </div>
 
+        {active.messages.every((m) => m.role === 'assistant') ? (
+          <div className="chat-suggest" aria-label="Suggestions">
+            {SUGGESTIONS.map((q) => (
+              <button key={q} type="button" className="chip" onClick={() => void send(q)} disabled={sending}>
+                {q}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
         <div className="chat-composer">
           <label className="sr-only" htmlFor="chatAsk">
             Message to Funke
           </label>
           <textarea
+            ref={inputRef}
             id="chatAsk"
             rows={2}
             placeholder="Ask Funke anything…"
@@ -485,21 +581,42 @@ export default function ChatPanel({ onClose }: Props) {
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                send();
+                void send();
               }
             }}
+            disabled={sending}
           />
           <div className="chat-composer-bar">
-            <span className="chat-composer-hint">Enter to send · Shift+Enter for newline</span>
+            <button
+              type="button"
+              className={`chat-mic${voiceSnap?.talkOn ? ' is-on' : ''}`}
+              aria-pressed={!!voiceSnap?.talkOn}
+              aria-label={voiceSnap?.talkOn ? 'Stop talking' : 'Talk to Funke'}
+              title={voiceSnap?.talkOn ? 'Stop talking' : 'Talk'}
+              onClick={() => void voice().toggleTalk()}
+            >
+              <Glyph name="mic" size={13} />
+            </button>
+            <span className="chat-composer-hint">
+              {sending
+                ? 'Funke is thinking…'
+                : voiceSnap?.talkOn
+                  ? voiceSnap.state === 'hearing'
+                    ? 'Hearing you…'
+                    : voiceSnap.state === 'thinking'
+                      ? 'Working on it…'
+                      : 'Listening. Your words appear here.'
+                  : 'Enter to send · Shift+Enter for newline'}
+            </span>
             <button
               type="button"
               className="mac-btn mac-btn-primary chat-send"
               aria-label="Send"
-              disabled={!draft.trim()}
-              onClick={send}
+              disabled={!draft.trim() || sending}
+              onClick={() => void send()}
             >
               <Glyph name="send" size={13} />
-              <span>Send</span>
+              <span>{sending ? '…' : 'Send'}</span>
             </button>
           </div>
         </div>

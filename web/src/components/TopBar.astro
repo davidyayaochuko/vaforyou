@@ -6,23 +6,25 @@ interface Props {
   modelLabel?: string;
   engineOn?: boolean;
 }
-const { modelLabel = 'Groq · llama', engineOn = false } = Astro.props;
+const { modelLabel = 'Groq', engineOn = false } = Astro.props;
 ---
 <header class="topbar" role="banner">
   <div class="topbar-left">
     <a href="/" class="topbar-apple" aria-label="Funke home">
-      <Icon name="funke" size={14} />
+      <span class="topbar-mark">
+        <Icon name="funke" size={14} />
+      </span>
     </a>
     <span class="topbar-app">Funke</span>
   </div>
 
   <div class="topbar-right">
     <div class="topbar-status">
-      <span class="topbar-extra" id="modelChip" title="Active language model">
+      <span class="topbar-extra topbar-chip" id="modelChip" title="Active language model">
         <span id="modelLabel">{modelLabel}</span>
       </span>
       <span
-        class="topbar-extra"
+        class="topbar-extra topbar-chip"
         id="engineChip"
         title="Social engine"
         style="gap: 5px;"
@@ -30,13 +32,8 @@ const { modelLabel = 'Groq · llama', engineOn = false } = Astro.props;
         <span
           id="engineDot"
           aria-hidden="true"
-          style={`
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: ${engineOn ? 'var(--mac-green)' : 'var(--mac-orange)'};
-            box-shadow: 0 0 0 0.5px rgba(0,0,0,0.15);
-          `}
+          class="status-dot"
+          data-on={engineOn ? '1' : '0'}
         ></span>
         <span id="engineLabel">{engineOn ? 'Engine on' : 'Engine off'}</span>
       </span>
@@ -61,6 +58,28 @@ const { modelLabel = 'Groq · llama', engineOn = false } = Astro.props;
   }
   tick();
   setInterval(tick, 30_000);
+
+  async function refreshStatus() {
+    try {
+      const res = await fetch('/api/health');
+      if (!res.ok) return;
+      const data = await res.json();
+      const model = document.getElementById('modelLabel');
+      const engineLabel = document.getElementById('engineLabel');
+      const engineDot = document.getElementById('engineDot');
+      if (model && data.ai) {
+        const kind = typeof data.ai === 'string' ? data.ai : data.ai.kind;
+        model.textContent = kind ? String(kind) : 'AI';
+      }
+      const running = data.engine && data.engine.running;
+      if (engineLabel) engineLabel.textContent = running ? 'Engine on' : 'Engine off';
+      if (engineDot) engineDot.setAttribute('data-on', running ? '1' : '0');
+    } catch {
+      /* server may be down; keep defaults */
+    }
+  }
+  refreshStatus();
+  setInterval(refreshStatus, 20_000);
 </script>
 <style>
   #modelLabel,

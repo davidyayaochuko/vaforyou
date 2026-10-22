@@ -1,7 +1,11 @@
 # Voice orb
 
-Big **fluid water blob**: high-detail icosphere, layered simplex noise displacement, Fresnel rim, specular sparkle, caustic shimmer.
+Living **water blob** (Three.js + R3F + custom GLSL):
 
-Modes change amplitude / turbulence (idle calm → listening reactive → speaking lively).
+- High-detail icosphere with layered simplex noise displacement
+- Analytic normals, Fresnel rim, specular sparkle, caustic core
+- Additive glass shell + soft floor disc + sparkle field
+- CSS glow + mode ring (idle / listening / speaking)
+- Honours `prefers-reduced-motion` (lower detail, no sparkles)
 
-Not ribbons/bars. Implementation: `VoiceOrb.tsx` (Three.js + R3F + custom GLSL).
+Modes change amplitude / turbulence / spin. Tap orb or Talk to listen.

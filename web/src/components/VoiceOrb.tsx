@@ -2,42 +2,52 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 
-export type OrbMode = 'idle' | 'listening' | 'speaking';
+export type OrbMode = 'idle' | 'listening' | 'thinking' | 'speaking';
 
 type Props = {
   mode?: OrbMode;
   size?: number;
   className?: string;
   level?: number;
+  /** Read every frame (live mic level). Overrides `level`. */
+  levelSource?: () => number;
 };
 
 /**
  * Living water blob: noise-displaced icosphere, analytic normals,
- * inner caustic core, thin glass rim.
+ * inner caustic core, thin glass rim, soft sparkle field.
  */
 export default function VoiceOrb({
   mode = 'idle',
   size = 520,
   className = '',
   level = 0,
+  levelSource,
 }: Props) {
+  const reduced =
+    typeof window !== 'undefined' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   return (
     <div
-      className={`orb-canvas-wrap ${className}`}
-      style={{ width: size, height: size, maxHeight: size }}
+      className={`orb-canvas-wrap orb-mode-${mode} ${className}`}
+      style={{ width: `min(${size}px, 82vw, 54vh)`, height: 'auto', aspectRatio: '1' }}
+      data-mode={mode}
       role="img"
       aria-label={`Funke voice visualizer, ${mode}`}
     >
       <div className="orb-glow" aria-hidden="true" />
+      <div className="orb-ring" aria-hidden="true" />
+      <div className="orb-shadow" aria-hidden="true" />
       <Canvas
-        dpr={[1, 2]}
-        camera={{ position: [0, 0.18, 4.6], fov: 35, near: 0.1, far: 50 }}
+        dpr={reduced ? [1, 1.25] : [1, 2]}
+        camera={{ position: [0, 0.18, 6.4], fov: 34, near: 0.1, far: 50 }}
         gl={{
           antialias: true,
           alpha: true,
           powerPreference: 'high-performance',
           toneMapping: THREE.ACESFilmicToneMapping,
-          toneMappingExposure: 1.12,
+          toneMappingExposure: 1.18,
         }}
         style={{
           position: 'absolute',
@@ -48,18 +58,111 @@ export default function VoiceOrb({
           zIndex: 1,
         }}
       >
-        <ambientLight intensity={0.32} />
-        <directionalLight position={[3.8, 5.5, 2.8]} intensity={1.5} color="#f2fbff" />
-        <directionalLight position={[-4.5, -1.5, -2.5]} intensity={0.5} color="#1aa87a" />
-        <pointLight position={[0.2, 0.4, 3.4]} intensity={1.2} color="#7adfff" distance={14} />
-        <pointLight position={[2.2, -2.4, -1.8]} intensity={0.55} color="#2f6b4f" distance={11} />
-        <WaterBlob mode={mode} level={level} />
+        <ambientLight intensity={0.36} />
+        <directionalLight position={[3.8, 5.5, 2.8]} intensity={1.55} color="#f5fcff" />
+        <directionalLight position={[-4.5, -1.2, -2.2]} intensity={0.55} color="#1aa87a" />
+        <pointLight position={[0.15, 0.5, 3.5]} intensity={1.35} color="#8ae6ff" distance={14} />
+        <pointLight position={[2.4, -2.2, -1.6]} intensity={0.6} color="#2f6b4f" distance={12} />
+        <pointLight position={[-2.2, 2.4, 1.2]} intensity={0.35} color="#a8f0d8" distance={10} />
+        <WaterBlob mode={mode} level={level} levelSource={levelSource} reduced={reduced} />
+        {!reduced ? <Sparkles mode={mode} level={level} levelSource={levelSource} /> : null}
       </Canvas>
     </div>
   );
 }
 
-function WaterBlob({ mode, level }: { mode: OrbMode; level: number }) {
+function Sparkles({
+  mode,
+  level,
+  levelSource,
+}: {
+  mode: OrbMode;
+  level: number;
+  levelSource?: () => number;
+}) {
+  const ref = useRef<THREE.Points>(null);
+  const modeRef = useRef(mode);
+  const levelRef = useRef(level);
+  modeRef.current = mode;
+  levelRef.current = level;
+
+  const { positions, phases } = useMemo(() => {
+    const count = 48;
+    const positions = new Float32Array(count * 3);
+    const phases = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
+      const u = Math.random();
+      const v = Math.random();
+      const theta = 2 * Math.PI * u;
+      const phi = Math.acos(2 * v - 1);
+      const r = 1.55 + Math.random() * 0.55;
+      positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+      positions[i * 3 + 2] = r * Math.cos(phi);
+      phases[i] = Math.random() * Math.PI * 2;
+    }
+    return { positions, phases };
+  }, []);
+
+  const geom = useMemo(() => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    return g;
+  }, [positions]);
+
+  const mat = useMemo(
+    () =>
+      new THREE.PointsMaterial({
+        color: '#c8f7ff',
+        size: 0.045,
+        transparent: true,
+        opacity: 0.55,
+        depthWrite: false,
+        sizeAttenuation: true,
+        blending: THREE.AdditiveBlending,
+      }),
+    [],
+  );
+
+  useFrame(({ clock }) => {
+    if (!ref.current) return;
+    const t = clock.getElapsedTime();
+    const m = modeRef.current;
+    const mic = levelSource ? levelSource() : levelRef.current;
+    const boost =
+      m === 'speaking' ? 1.35 : m === 'listening' ? 1.15 + mic * 0.4 : m === 'thinking' ? 1.05 : 0.85;
+    mat.opacity = 0.28 * boost + Math.sin(t * 1.4) * 0.06;
+    mat.size = 0.038 + (m === 'speaking' ? 0.02 : mic * 0.015);
+    ref.current.rotation.y = t * (m === 'thinking' ? 0.32 : 0.06);
+    const arr = ref.current.geometry.attributes.position!.array as Float32Array;
+    for (let i = 0; i < phases.length; i++) {
+      const base = i * 3;
+      const pulse = 1 + Math.sin(t * 1.8 + phases[i]!) * 0.04 * boost;
+      // nudge along radius gently
+      const x = positions[base]!;
+      const y = positions[base + 1]!;
+      const z = positions[base + 2]!;
+      arr[base] = x * pulse;
+      arr[base + 1] = y * pulse;
+      arr[base + 2] = z * pulse;
+    }
+    ref.current.geometry.attributes.position!.needsUpdate = true;
+  });
+
+  return <points ref={ref} geometry={geom} material={mat} />;
+}
+
+function WaterBlob({
+  mode,
+  level,
+  levelSource,
+  reduced,
+}: {
+  mode: OrbMode;
+  level: number;
+  levelSource?: () => number;
+  reduced: boolean;
+}) {
   const group = useRef<THREE.Group>(null);
   const modeRef = useRef(mode);
   const levelRef = useRef(level);
@@ -67,9 +170,10 @@ function WaterBlob({ mode, level }: { mode: OrbMode; level: number }) {
   modeRef.current = mode;
   levelRef.current = level;
 
-  const geometry = useMemo(() => new THREE.IcosahedronGeometry(1.38, 6), []);
-  const shellGeo = useMemo(() => new THREE.IcosahedronGeometry(1.445, 4), []);
-  const coreGeo = useMemo(() => new THREE.IcosahedronGeometry(0.7, 3), []);
+  const detail = reduced ? 4 : 7;
+  const geometry = useMemo(() => new THREE.IcosahedronGeometry(1.38, detail), [detail]);
+  const shellGeo = useMemo(() => new THREE.IcosahedronGeometry(1.448, reduced ? 3 : 5), [reduced]);
+  const coreGeo = useMemo(() => new THREE.IcosahedronGeometry(0.74, 4), []);
 
   const outerMat = useMemo(() => makeWaterMaterial(), []);
   const shellMat = useMemo(() => makeShellMaterial(), []);
@@ -78,19 +182,24 @@ function WaterBlob({ mode, level }: { mode: OrbMode; level: number }) {
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime();
     const m = modeRef.current;
-    const mic = Math.min(1, Math.max(0, levelRef.current));
+    const raw = levelSource ? levelSource() : levelRef.current;
+    const mic = Math.min(1, Math.max(0, raw));
 
-    let amp = 0.13;
-    let turb = 0.88;
-    let spin = 0.08;
+    let amp = 0.09;
+    let turb = 0.72;
+    let spin = 0.055;
     if (m === 'listening') {
-      amp = 0.2 + mic * 0.26;
-      turb = 1.25 + mic * 0.45;
-      spin = 0.18;
+      amp = 0.16 + mic * 0.24;
+      turb = 1.05 + mic * 0.4;
+      spin = 0.14;
+    } else if (m === 'thinking') {
+      amp = 0.11;
+      turb = 0.95;
+      spin = 0.5;
     } else if (m === 'speaking') {
-      amp = 0.3;
-      turb = 1.55;
-      spin = 0.28;
+      amp = 0.16 + mic * 0.16;
+      turb = 1.25;
+      spin = 0.22;
     }
 
     const s = smooth.current;
@@ -112,10 +221,12 @@ function WaterBlob({ mode, level }: { mode: OrbMode; level: number }) {
     coreMat.uniforms.uLevel!.value = mic;
 
     if (group.current) {
-      group.current.rotation.y = t * s.spin;
-      group.current.rotation.x = Math.sin(t * 0.32) * 0.1;
-      group.current.rotation.z = Math.cos(t * 0.26) * 0.07;
-      const breathe = 1 + Math.sin(t * 0.85) * 0.028 + mic * 0.055;
+      const drift = reduced ? 0.4 : 1;
+      group.current.rotation.y = t * s.spin * drift;
+      group.current.rotation.x = Math.sin(t * 0.32) * 0.1 * drift;
+      group.current.rotation.z = Math.cos(t * 0.26) * 0.07 * drift;
+      const breathe = 1 + Math.sin(t * 0.85) * 0.03 * drift + mic * 0.06;
+      group.current.position.y = Math.sin(t * 0.55) * 0.04 * drift;
       group.current.scale.setScalar(breathe);
     }
   });
@@ -212,7 +323,6 @@ function makeWaterMaterial() {
         float swell = fbm(pos * (0.78 * uTurb) + vec3(0.0, t * 0.16, t * 0.12));
         float ripples = fbm(pos * (2.1 * uTurb) + vec3(t * 0.42, t * 0.32, -t * 0.28));
         float drip = fbm(pos * (3.6 * uTurb) - vec3(t * 0.7, t * 0.55, t * 0.4));
-        // Soft blob: swell dominates, drip is a whisper
         float d = swell * 0.62 + ripples * 0.28 + drip * 0.1;
         return d * uAmp * (1.0 + uLevel * 1.25);
       }
@@ -223,7 +333,6 @@ function makeWaterMaterial() {
         float d = field(position, t);
         vec3 newPos = nrm * (length(position) * (1.0 + d));
 
-        // Gradient of scalar field → smooth displaced normal
         float e = 0.035;
         vec3 grad = vec3(
           field(position + vec3(e, 0.0, 0.0), t) - field(position - vec3(e, 0.0, 0.0), t),
@@ -390,7 +499,7 @@ function makeShellMaterial() {
         vec3 N = normalize(vNormal);
         vec3 V = normalize(cameraPosition - vWorldPos);
         float fresnel = pow(1.0 - max(dot(N, V), 0.0), 2.5);
-        float rim = fresnel * (0.4 + uLevel * 0.28);
+        float rim = fresnel * (0.42 + uLevel * 0.3);
         gl_FragColor = vec4(0.72, 0.94, 1.0, rim);
       }
     `,
@@ -435,7 +544,7 @@ function makeCoreMaterial() {
         vec3 N = normalize(vNormal);
         vec3 V = normalize(cameraPosition - vWorldPos);
         float fresnel = pow(1.0 - max(dot(N, V), 0.0), 1.8);
-        float glow = (1.0 - fresnel) * (0.28 + uLevel * 0.22);
+        float glow = (1.0 - fresnel) * (0.3 + uLevel * 0.25);
         float bands = sin(vPos.y * 12.0 + uTime * 2.5) * 0.5 + 0.5;
         glow *= 0.7 + bands * 0.3;
         gl_FragColor = vec4(uColor, glow);
