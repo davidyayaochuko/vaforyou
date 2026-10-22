@@ -32,12 +32,16 @@ export default function ActionCluster({
         type="button"
         className={`action-btn${talkActive ? ' is-active' : ''}`}
         aria-pressed={talkActive}
-        aria-label={talkActive ? 'Stop listening' : 'Talk: hold a conversation'}
-        title={talkActive ? 'Stop listening' : 'Start talking'}
+        aria-label={talkActive ? 'Stop conversation' : 'Talk: continuous conversation (Space still works when this is off)'}
+        title={
+          talkActive
+            ? 'Stop conversation'
+            : 'Continuous conversation. Hold Space or the orb anytime this is off for push-to-talk.'
+        }
         onClick={onTalk}
       >
         <Glyph name="mic" size={13} />
-        <span>{talkActive ? 'Listening' : 'Talk'}</span>
+        <span>{talkActive ? 'In call' : 'Talk'}</span>
       </button>
 
       <button

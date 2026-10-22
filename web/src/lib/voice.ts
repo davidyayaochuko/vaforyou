@@ -1,20 +1,25 @@
 /**
  * Funke voice engine for the web shell.
  *
- * Talk: mic → voice-activity detection → one recording per utterance
- * (each needs its own container header, or Groq rejects mid-stream chunks)
- * → /api/voice/transcribe → /api/ask → optional speech.
- * Speak: Azure TTS via /api/voice/speak when configured, browser voices otherwise.
+ * Two talk modes:
+ * - hold (push-to-talk): Space / orb press starts, release submits and closes the mic.
+ * - conversation (Cursor-style): Talk button stays open. Pause to send, reply plays,
+ *   then listening resumes so you can keep going without re-triggering.
  *
+ * Pipeline: mic → VAD → one MediaRecorder per utterance → transcribe → ask → optional TTS.
  * Voice never approves. Approvals are only decided by on-screen buttons.
  */
 import { api, askFunkeDetailed } from './api';
 
 export type VoiceState = 'idle' | 'listening' | 'hearing' | 'thinking' | 'speaking';
+/** How the current mic session was opened. Null when the mic is off. */
+export type TalkMode = 'hold' | 'conversation';
 
 export type VoiceSnapshot = {
   state: VoiceState;
   talkOn: boolean;
+  /** Active session style while talkOn; null when idle. */
+  talkMode: TalkMode | null;
   speakOn: boolean;
   transcript: string;
   reply: string;
@@ -27,7 +32,9 @@ type Listener = (s: VoiceSnapshot) => void;
 
 const SPEAK_KEY = 'funke-speak';
 const THRESHOLD = 0.045;
-const SILENCE_MS = 1100;
+/** Pause length before an utterance is cut and sent (conversation is a touch snappier). */
+const SILENCE_HOLD_MS = 1100;
+const SILENCE_CONVERSATION_MS = 850;
 const IDLE_STOP_MS = 60_000;
 
 function pickMime(): string {
@@ -65,6 +72,10 @@ class VoiceEngine {
   private audio: HTMLAudioElement | null = null;
   private ttsProvider: 'azure' | 'browser' | null = null;
   private smoothed = 0;
+  /** True while releaseTalk is finalizing an utterance (blocks re-entrant start/stop). */
+  private releasing = false;
+  /** Release arrived while startTalk was still opening the mic. */
+  private pendingRelease = false;
 
   constructor() {
     let speakOn = false;
@@ -73,7 +84,15 @@ class VoiceEngine {
     } catch {
       /* ignore */
     }
-    this.snap = { state: 'idle', talkOn: false, speakOn, transcript: '', reply: '', notice: '' };
+    this.snap = {
+      state: 'idle',
+      talkOn: false,
+      talkMode: null,
+      speakOn,
+      transcript: '',
+      reply: '',
+      notice: '',
+    };
   }
 
   get snapshot(): VoiceSnapshot {
@@ -111,13 +130,66 @@ class VoiceEngine {
     this.set({ speakOn: on, notice: on ? 'Replies will be read aloud.' : '' });
   }
 
+  /**
+   * Continuous conversation toggle (does not replace push-to-talk).
+   * - idle → open conversation
+   * - conversation → stop
+   * - hold (Space/orb in progress) → upgrade to conversation so both modes coexist:
+   *   finish this thought hands-free without releasing to end the mic
+   */
   async toggleTalk() {
-    if (this.snap.talkOn) this.stopTalk();
-    else await this.startTalk();
+    if (this.snap.talkMode === 'conversation') {
+      this.stopTalk();
+      return;
+    }
+    if (this.snap.talkMode === 'hold') {
+      this.set({
+        talkMode: 'conversation',
+        notice: 'Switched to conversation. Pause to send. Tap Talk to stop.',
+      });
+      return;
+    }
+    await this.startTalk('conversation');
   }
 
-  async startTalk() {
-    if (this.snap.talkOn) return;
+  /**
+   * Push-to-talk release (hold mode only): finalize any in-progress utterance,
+   * send it, then close the mic. No-op in conversation mode so Space/orb
+   * cannot accidentally end an open back-and-forth.
+   */
+  async releaseTalk() {
+    if (this.releasing) return;
+    if (!this.snap.talkOn) {
+      // Press was so short that getUserMedia has not finished yet.
+      this.pendingRelease = true;
+      return;
+    }
+    if (this.snap.talkMode !== 'hold') return;
+    this.pendingRelease = false;
+    this.releasing = true;
+    cancelAnimationFrame(this.raf);
+    this.raf = 0;
+    try {
+      const recording =
+        this.speechStarted || (!!this.recorder && this.recorder.state !== 'inactive');
+      if (recording) {
+        this.speechStarted = false;
+        this.quietSince = 0;
+        await this.captureUtterance();
+      }
+    } finally {
+      this.releasing = false;
+      this.stopTalk();
+    }
+  }
+
+  async startTalk(mode: TalkMode = 'conversation') {
+    if (this.releasing) return;
+    if (this.snap.talkOn) {
+      // Already in a session. Do not demote conversation to hold mid-turn.
+      return;
+    }
+    this.pendingRelease = false;
     if (!navigator.mediaDevices?.getUserMedia) {
       this.set({ notice: 'This browser cannot use the microphone.' });
       return;
@@ -127,6 +199,7 @@ class VoiceEngine {
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
     } catch (err) {
+      this.pendingRelease = false;
       const denied = /Permission|NotAllowed|denied/i.test(String(err));
       this.set({
         notice: denied
@@ -148,15 +221,26 @@ class VoiceEngine {
     this.lastActivity = Date.now();
     this.set({
       talkOn: true,
+      talkMode: mode,
       state: 'listening',
       transcript: '',
       reply: '',
-      notice: 'Listening. Speak naturally. Voice can’t approve.',
+      notice:
+        mode === 'hold'
+          ? 'Listening. Release to send. Voice can’t approve.'
+          : 'Conversation on. Pause when you finish a thought. Tap Talk to stop.',
     });
     this.loop();
+    if (this.pendingRelease && mode === 'hold') {
+      this.pendingRelease = false;
+      await this.releaseTalk();
+    } else {
+      this.pendingRelease = false;
+    }
   }
 
   stopTalk() {
+    this.pendingRelease = false;
     cancelAnimationFrame(this.raf);
     this.raf = 0;
     try {
@@ -173,7 +257,7 @@ class VoiceEngine {
     this.analyser = null;
     this.smoothed = 0;
     this.stopSpeaking();
-    this.set({ talkOn: false, state: 'idle', notice: '' });
+    this.set({ talkOn: false, talkMode: null, state: 'idle', notice: '' });
   }
 
   private rms(): number {
@@ -212,14 +296,19 @@ class VoiceEngine {
       if (this.snap.state !== 'hearing') this.set({ state: 'hearing' });
     } else if (this.speechStarted) {
       if (!this.quietSince) this.quietSince = now;
-      if (now - this.quietSince >= SILENCE_MS) {
+      const silenceMs =
+        this.snap.talkMode === 'conversation' ? SILENCE_CONVERSATION_MS : SILENCE_HOLD_MS;
+      if (now - this.quietSince >= silenceMs) {
         this.speechStarted = false;
         this.quietSince = 0;
         void this.captureUtterance();
       }
-    } else if (now - this.lastActivity >= IDLE_STOP_MS) {
+    } else if (
+      this.snap.talkMode === 'conversation' &&
+      now - this.lastActivity >= IDLE_STOP_MS
+    ) {
       this.stopTalk();
-      this.set({ notice: 'I paused Talk after a quiet minute. Tap Talk to continue.' });
+      this.set({ notice: 'I paused the conversation after a quiet minute. Tap Talk to continue.' });
     }
   };
 
@@ -295,16 +384,29 @@ class VoiceEngine {
       const turn: VoiceTurn = { user: text, reply, source: 'voice' };
       pendingTurns().push(turn);
       window.dispatchEvent(new CustomEvent<VoiceTurn>('funke:turn', { detail: turn }));
-      this.set({
-        reply,
-        notice: approvals.length ? 'Something needs your approval. Tap Approvals.' : '',
-      });
-      if (this.snap.talkOn || this.snap.speakOn) await this.speak(reply, approvals.length > 0);
+      const approvalNote = approvals.length ? 'Something needs your approval. Tap Approvals.' : '';
+      this.set({ reply, notice: approvalNote });
+      // Conversation always hears the reply; hold uses an open mic or Speak toggle.
+      const shouldSpeak =
+        this.snap.talkMode === 'conversation' || this.snap.talkOn || this.snap.speakOn;
+      if (shouldSpeak) await this.speak(reply, approvals.length > 0);
     } catch (err) {
       this.set({ notice: err instanceof Error ? err.message : 'I could not reach Funke.' });
     } finally {
-      this.set({ state: this.snap.talkOn ? 'listening' : 'idle' });
+      // Cursor-style: after the reply, open the ear again without the user tapping Talk.
+      this.speechStarted = false;
+      this.quietSince = 0;
       this.lastActivity = Date.now();
+      if (this.snap.talkOn) {
+        const keepNotice = this.snap.notice.includes('approval')
+          ? this.snap.notice
+          : this.snap.talkMode === 'conversation'
+            ? 'Your turn. Keep talking, or tap Talk to stop.'
+            : this.snap.notice;
+        this.set({ state: 'listening', notice: keepNotice });
+      } else {
+        this.set({ state: 'idle' });
+      }
     }
   }
 

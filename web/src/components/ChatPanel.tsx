@@ -589,10 +589,16 @@ export default function ChatPanel({ onClose }: Props) {
           <div className="chat-composer-bar">
             <button
               type="button"
-              className={`chat-mic${voiceSnap?.talkOn ? ' is-on' : ''}`}
-              aria-pressed={!!voiceSnap?.talkOn}
-              aria-label={voiceSnap?.talkOn ? 'Stop talking' : 'Talk to Funke'}
-              title={voiceSnap?.talkOn ? 'Stop talking' : 'Talk'}
+              className={`chat-mic${voiceSnap?.talkMode === 'conversation' ? ' is-on' : ''}`}
+              aria-pressed={voiceSnap?.talkMode === 'conversation'}
+              aria-label={
+                voiceSnap?.talkMode === 'conversation' ? 'Stop conversation' : 'Start conversation'
+              }
+              title={
+                voiceSnap?.talkMode === 'conversation'
+                  ? 'Stop conversation'
+                  : 'Continuous conversation'
+              }
               onClick={() => void voice().toggleTalk()}
             >
               <Glyph name="mic" size={13} />
@@ -600,12 +606,14 @@ export default function ChatPanel({ onClose }: Props) {
             <span className="chat-composer-hint">
               {sending
                 ? 'Funke is thinking…'
-                : voiceSnap?.talkOn
+                : voiceSnap?.talkMode === 'conversation'
                   ? voiceSnap.state === 'hearing'
                     ? 'Hearing you…'
                     : voiceSnap.state === 'thinking'
                       ? 'Working on it…'
-                      : 'Listening. Your words appear here.'
+                      : voiceSnap.state === 'speaking'
+                        ? 'Speaking. Keep talking to interrupt.'
+                        : 'Conversation on. Pause to send. Replies land here.'
                   : 'Enter to send · Shift+Enter for newline'}
             </span>
             <button
