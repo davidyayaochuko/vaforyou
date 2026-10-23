@@ -1575,9 +1575,14 @@ function rankVoice(name, lang) {
   const n = (name + ' ' + lang).toLowerCase();
   let s = 0;
   if (/en-ng|nigeria/.test(n)) s += 100;
-  if (/ezinne|abeo/.test(n)) s += 40;
-  if (/en-gb|en-us|en-za|en-in/.test(n)) s += 10;
-  if (/natural|online/.test(n)) s += 5;
+  if (/ezinne/.test(n)) s += 90;
+  if (/abeo/.test(n)) s -= 60;
+  if (/female|woman|girl|ezinne|samantha|karen|moira|fiona|tessa|veena|raveena|zira|susan|hazel|serena|aria|jenny|sara|emma|ava|allison|kathy|victoria|martha|helen|catherine|sonia|lekha|neerja/.test(n)) s += 55;
+  if (/male|\bman\b|boy|abeo|daniel|david|fred|jorge|thomas|mark|george|james|ravi|sean|alex(?!a)|tom\b|lee\b/.test(n)) s -= 45;
+  if (/en-gb/.test(n)) s += 18;
+  else if (/en-za|en-in|en-au|en-ie/.test(n)) s += 12;
+  else if (/en-us/.test(n)) s += 8;
+  if (/natural|neural|online|premium|enhanced/.test(n)) s += 8;
   return s;
 }
 
@@ -1627,7 +1632,7 @@ function fillVoiceSelect() {
   if (note) {
     note.textContent = prov.value === 'azure'
       ? ((ttsInfo.azure && ttsInfo.azure.note) || 'Azure sends text to Microsoft Speech.')
-      : 'Browser TTS keeps text on this device when using local voices. Prefer Edge for Nigerian English (Abeo/Ezinne).';
+      : 'Browser TTS keeps text on this device when using local voices. Prefer Edge for female Nigerian English (Ezinne).';
   }
 }
 
@@ -1750,7 +1755,9 @@ async function speakReply(text, hasApproval, msgEl) {
   const speakNext = () => {
     if (idx >= sentences.length) { afterSpeakDone(); return; }
     const u = new SpeechSynthesisUtterance(sentences[idx++]);
-    u.rate = voiceSettings.rate || 1;
+    // Default cadence is a touch slower than 1.0 so Funke sounds measured, not rushed.
+    u.rate = voiceSettings.rate || 0.94;
+    u.pitch = 1.08;
     u.lang = 'en-NG';
     const voices = browserVoicesSorted();
     const match = voices.find((v) => v.voiceURI === voiceSettings.voiceURI) || voices[0];

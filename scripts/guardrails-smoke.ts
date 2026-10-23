@@ -12,6 +12,7 @@ import {
   decideApproval,
 } from '../src/guardrails/approvals.ts';
 import { ensureAuditTable, searchAudit, maskSummary } from '../src/guardrails/audit.ts';
+import { features } from '../src/config/features.ts';
 
 let failed = 0;
 function check(name: string, pass: boolean, detail?: unknown): void {
@@ -41,10 +42,11 @@ async function main(): Promise<void> {
   const defaults = defaultAutonomy();
   check('payment.any blocked', defaults['payment.any'] === 'blocked');
   check('content.publish needs approval', defaults['content.publish'] === 'approval_required');
-  check('workspace.write blocked', defaults['workspace.write'] === 'blocked');
+  check('workspace.write needs approval', defaults['workspace.write'] === 'approval_required');
   check('autonomyFor payment', autonomyFor('payment.transfer') === 'blocked');
-  const saved = saveAutonomy({ 'calendar.create': 'approval_required' });
+  const saved = saveAutonomy({ 'calendar.create': 'approval_required', 'workspace.write': 'auto' });
   check('cannot weaken payment to auto', saved['payment.any'] === 'blocked');
+  check('cannot set workspace.write to auto', saved['workspace.write'] === 'approval_required');
   check('loadAutonomy merges', loadAutonomy()['calendar.create'] === 'approval_required');
 
   console.log('\n3. Approval queue + voice ban');
@@ -84,6 +86,39 @@ async function main(): Promise<void> {
     sourceText: 'transfer funds to the vendor now',
   });
   check('payment request blocked', blockedPay.status === 'blocked', blockedPay.reply);
+
+  const wsPending = await requestAction({
+    actionType: 'workspace.write',
+    title: 'Workspace: send_gmail_message',
+    summary: 'Send a test mail',
+    preview: 'Tool: send_gmail_message\nto: nobody@example.com\nsubject: guardrail',
+    payload: {
+      tool: 'send_gmail_message',
+      arguments: { to: 'nobody@example.com', subject: 'guardrail', body: 'no' },
+    },
+    idempotencyKey: `guardrail-ws-${Date.now()}`,
+  });
+  check('workspace.write becomes pending', wsPending.status === 'pending' && !!wsPending.approval, wsPending.status);
+
+  const wsVoice = await decideApproval({
+    id: wsPending.approval!.id,
+    decision: 'approved',
+    decidedBy: 'voice',
+  });
+  check('voice cannot approve workspace.write', !wsVoice.ok && /Voice cannot approve/i.test(wsVoice.reply), wsVoice.reply);
+
+  // Force the flag off even if the developer .env enabled writes.
+  features.workspaceMcpWrites = false;
+  const wsDash = await decideApproval({
+    id: wsPending.approval!.id,
+    decision: 'approved',
+    decidedBy: 'dashboard',
+  });
+  check(
+    'workspace.write fails closed when writes flag off',
+    !wsDash.ok && /WORKSPACE_MCP_WRITES=false/i.test(wsDash.reply),
+    wsDash.reply,
+  );
 
   console.log('\n4. Audit + masking');
   const masked = maskSummary('email me at boss@company.com with key gsk_abcdefghijklmnop');

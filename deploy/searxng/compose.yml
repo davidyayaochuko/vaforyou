@@ -1,0 +1,24 @@
+# Private SearXNG for Funke web research (Workstream G).
+# Loopback only. Do not scrape public instances.
+#
+#   docker compose -f deploy/searxng/compose.yml up -d
+#   # then in .env: SEARXNG_URL=http://127.0.0.1:8080
+#
+services:
+  searxng:
+    image: docker.io/searxng/searxng:latest
+    container_name: funke-searxng
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:8080:8080'
+    volumes:
+      - ./settings.yml:/etc/searxng/settings.yml:ro
+    environment:
+      - SEARXNG_BASE_URL=http://127.0.0.1:8080/
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+      - DAC_OVERRIDE

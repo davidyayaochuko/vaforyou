@@ -44,7 +44,7 @@ Last reviewed: 22 October 2026.
 |---|---|---|---|
 | Chat in plain English | Have | P0 | `POST /api/ask` → `handleVaCommand`. Astro Chat panel is wired to it. |
 | Multiple conversations, rename, archive, export | Have (dashboard), Partial (Astro) | P0 | Server has `/api/conversations/*`. Astro still stores threads in `localStorage`; move to server threads. |
-| Talk (hands-free conversation) | Have (dashboard), Have (Astro web) | P0 | Mic + voice-activity detection, Groq Whisper transcription, reply, optional speech. Barge-in stops Funke mid-sentence. |
+| Talk (hands-free conversation) | Have (dashboard), Have (Astro web) | P0 | Mic + Silero VAD (RMS fallback), Groq Whisper, reply, optional speech. Barge-in stops Funke mid-sentence. RNNoise enhance still planned. |
 | Speak (read replies aloud) | Have | P0 | Azure Neural TTS when configured, browser `speechSynthesis` otherwise. |
 | Push-to-talk shortcut | Planned | P1 | Hold a key (web), global hotkey (desktop), Action Button or widget (mobile). |
 | Wake word ("Hey Funke") | Later | P2 | On-device only. Never streams the room to a server. |
@@ -88,7 +88,7 @@ Last reviewed: 22 October 2026.
 | Feature | Status | Priority | Notes |
 |---|---|---|---|
 | Send reminder emails to the owner | Have | P0 | `sendEmail` via SMTP. |
-| Read and search Gmail | Partial | P0 | Through the Google Workspace MCP (`isWorkspaceAsk`). |
+| Read and search Gmail | Partial | P0 | Through the Google Workspace MCP (`isWorkspaceAsk`). Writes queue as `workspace.write` approvals when `WORKSPACE_MCP_WRITES=true`. |
 | Inbox triage: summarise, label, "needs you" list | Planned | P0 | Morning digest of what needs a reply, what is FYI, what is noise. |
 | Draft replies in the owner's voice | Planned | P0 | Uses the learned voice profile. Sending is always an approval. |
 | Turn emails into tasks or events | Planned | P0 | "Add this to my calendar" on an email thread. |
@@ -100,8 +100,8 @@ Last reviewed: 22 October 2026.
 
 | Feature | Status | Priority | Notes |
 |---|---|---|---|
-| Meeting prep brief | Planned | P0 | Before each meeting: who is attending, last notes, open follow-ups, linked docs. |
-| Join calls to take notes (Zoom, Google Meet, Teams) | Planned | P0 | A notetaker bot joins as "Funke (notes for <owner>)" and announces itself. Recording needs the owner's opt-in per meeting and must respect each platform's consent rules. |
+| Meeting prep brief | Planned | P0 | Before each meeting: who is attending, last notes, open follow-ups, linked docs. Stub: `docs/VEXA-MEETINGS.md`. |
+| Join calls to take notes (Zoom, Google Meet, Teams) | Planned | P0 | Vexa self-host path documented; Chat fails closed until `VEXA_API_URL`. Opt-in per meeting; no silent join. |
 | Local capture fallback | Planned | P1 | Desktop app records system audio for in-person or unsupported calls, with a visible indicator. |
 | Live transcript and summary | Planned | P0 | Whisper (Groq) or a local model. Summary: decisions, action items, owners, dates. |
 | Action items into tasks | Planned | P0 | Each action item becomes a task or follow-up, assigned to a person. |
@@ -138,8 +138,8 @@ Last reviewed: 22 October 2026.
 
 | Feature | Status | Priority | Notes |
 |---|---|---|---|
-| Slack: read channels and DMs | Planned | P0 | Slack app with user-token scopes the owner grants. Funke summarises unread threads and mentions. |
-| Slack: draft and send replies | Planned | P0 | Sending is an approval. |
+| Slack: read channels and DMs | Have | P0 | `SLACK_USER_TOKEN` (xoxp). “what did I miss on Slack?” → search unreads/mentions. |
+| Slack: draft and send replies | Have | P0 | Drafts in Chat; send queues `slack.send` on Approvals (never auto). |
 | Slack: "Funke, remind me" from Slack | Planned | P1 | Slash command or DM to the Funke app creates tasks and reminders. |
 | Microsoft Teams chat | Later | P2 | Graph connector. |
 | WhatsApp (Business API) | Later | P2 | Important for Lagos clients; needs Meta Business approval and a template policy. |
@@ -160,7 +160,7 @@ Last reviewed: 22 October 2026.
 | Feature | Status | Priority | Notes |
 |---|---|---|---|
 | Research from memory and KB only | Have | P1 | Fails closed. Will not invent sources. |
-| Web research with citations | Planned | P1 | Every claim links to a source. Unsourced claims are dropped. |
+| Web research with citations | Have | P1 | Private SearXNG (`SEARXNG_URL`). Every web bullet has a URL; down/unset → fail closed. |
 | Company / person brief before a meeting | Planned | P1 | Feeds meeting prep. |
 
 ### 3.11 Safety, trust and control

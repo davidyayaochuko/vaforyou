@@ -1,0 +1,19 @@
+# Private Funke instance. JSON is required for /api research; do not point at public SearXNG.
+# Docs: https://docs.searxng.org/admin/settings/settings.html
+use_default_settings: true
+
+server:
+  secret_key: 'change-me'
+  limiter: false
+  image_proxy: false
+  bind_address: '0.0.0.0'
+  port: 8080
+
+search:
+  safe_search: 1
+  formats:
+    - html
+    - json
+
+ui:
+  static_use_hash: true

@@ -58,17 +58,26 @@ export function applyPronunciation(text: string, map: Record<string, string>): s
 
 /**
  * Clean text for speech. Shared by browser and Azure adapters.
- * Does not truncate; use spokenLine() for on-screen spoken + audio parity.
+ * Shapes cadence for a calm female delivery: clear pauses, spoken forms,
+ * no markup. Does not truncate; use spokenLine() for on-screen + audio parity.
  */
 export function prepareForSpeech(
   text: string,
   pronunciation: Record<string, string> = {},
 ): string {
   let t = String(text ?? '');
-  t = t.replace(/\u2014/g, '-');
+  t = t.replace(/\u2014|\u2013/g, ', ');
   t = t.replace(/[*_~`#]+/g, '');
   t = t.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/gi, '$1 link');
   t = t.replace(/https?:\/\/\S+/gi, 'link');
+  // Spoken forms of common shorthand (keeps TTS from spelling letters awkwardly).
+  t = t.replace(/\bFYI\b/g, 'for your information');
+  t = t.replace(/\bASAP\b/g, 'as soon as possible');
+  t = t.replace(/\bETA\b/g, 'estimated time');
+  t = t.replace(/\bOK\b/g, 'okay');
+  t = t.replace(/\bID\b/g, 'I D');
+  t = t.replace(/\be\.g\./gi, 'for example');
+  t = t.replace(/\bi\.e\./gi, 'that is');
   t = t.replace(/₦\s?([\d,]+(?:\.\d+)?)/g, (_m, num: string) => {
     const n = Number(String(num).replace(/,/g, ''));
     if (!Number.isFinite(n)) return 'naira';
@@ -90,7 +99,15 @@ export function prepareForSpeech(
     const apWord = String(ap).toLowerCase() === 'am' ? 'a.m.' : 'p.m.';
     return `${numberToWords(Number(h))} ${apWord}`;
   });
-  t = t.replace(/\n+/g, '. ').replace(/\s+/g, ' ').trim();
+  // Cadence: turn list/semicolon dumps into breathable clauses.
+  t = t.replace(/\n+/g, '. ');
+  t = t.replace(/\s*;\s*/g, '. ');
+  t = t.replace(/\s*:\s+/g, '. ');
+  t = t.replace(/\s{2,}/g, ' ');
+  t = t.replace(/\s+([,.!?])/g, '$1');
+  t = t.replace(/([.!?]){2,}/g, '$1');
+  t = t.replace(/\.\s*\./g, '.');
+  t = t.trim();
   t = applyPronunciation(t, pronunciation);
   return t;
 }
@@ -140,14 +157,35 @@ export function isApprovalPrompt(text: string): boolean {
   return /I need your approval|Approve, edit, or reject|Voice cannot approve/i.test(text);
 }
 
-/** Prefer Nigerian English browser voices when listing. */
+/**
+ * Prefer a female Nigerian (or close) browser voice.
+ * Funke is a woman; never default to Abeo / other male voices when a female exists.
+ */
 export function rankBrowserVoice(name: string, lang: string): number {
   const n = `${name} ${lang}`.toLowerCase();
   let score = 0;
   if (/en-ng|nigeria/.test(n)) score += 100;
-  if (/ezinne|abeo/.test(n)) score += 40;
-  if (/en-gb|en-us|en-za|en-in/.test(n)) score += 10;
-  if (/natural|online/.test(n)) score += 5;
+  if (/ezinne/.test(n)) score += 90;
+  // Male NG voice: keep available, but never win against a female option.
+  if (/abeo/.test(n)) score -= 60;
+  if (
+    /female|woman|girl|ezinne|samantha|karen|moira|fiona|tessa|veena|raveena|zira|susan|hazel|serena|aria|jenny|sara|emma|ava|allison|kathy|victoria|martha|helen|catherine|sonia|lekha|neerja/.test(
+      n,
+    )
+  ) {
+    score += 55;
+  }
+  if (
+    /male|\bman\b|boy|abeo|daniel|david|fred|jorge|thomas|mark|george|james|ravi|sean|alex(?!a)|tom\b|lee\b/.test(
+      n,
+    )
+  ) {
+    score -= 45;
+  }
+  if (/en-gb/.test(n)) score += 18;
+  else if (/en-za|en-in|en-au|en-ie/.test(n)) score += 12;
+  else if (/en-us/.test(n)) score += 8;
+  if (/natural|neural|online|premium|enhanced/.test(n)) score += 8;
   return score;
 }
 

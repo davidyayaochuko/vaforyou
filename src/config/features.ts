@@ -11,7 +11,8 @@ export const features = {
   engageFeedEnabled: env.engageFeedEnabled,
   /**
    * Workspace MCP write tools (send mail, create/delete Drive files, etc.).
-   * Default off until the generic approval queue exists. Read tools still work.
+   * Default off. When on, writes still go through the approvals rail — never auto.
+   * Read tools work whenever the MCP server is configured.
    */
   workspaceMcpWrites: env.workspaceMcpWrites,
 };

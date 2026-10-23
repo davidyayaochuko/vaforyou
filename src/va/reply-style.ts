@@ -19,11 +19,13 @@ export function saveReplyStyle(style: string): ReplyStyle {
 }
 
 export function replyStylePromptBlock(style: ReplyStyle = loadReplyStyle()): string {
+  const spoken =
+    'Spoken cadence (read aloud, female voice): fluent Nigerian English that can dip into light Pidgin when casual ("abeg", "sha", "no wahala", "I sabi"), then clean English for exact facts. Short clauses, contractions, natural pauses. End a thought before the next. No bullet dumps, no telegram-speak, no semicolon stacks.';
   if (style === 'detailed') {
-    return 'Reply style: detailed. Use short paragraphs. Include numbered steps when guiding. Still no jargon dumps.';
+    return `${spoken}\nReply style: detailed. Short paragraphs. Numbered steps only when guiding. Still no jargon dumps.`;
   }
   if (style === 'normal') {
-    return 'Reply style: normal. A few short sentences. One clarifying question max.';
+    return `${spoken}\nReply style: normal. A few short sentences. One clarifying question max.`;
   }
-  return 'Reply style: brief. One or two short sentences unless they ask for steps.';
+  return `${spoken}\nReply style: brief. One or two short sentences unless they ask for steps.`;
 }

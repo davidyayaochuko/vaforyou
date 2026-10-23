@@ -36,6 +36,22 @@ export interface FollowUp {
   created_at: string;
 }
 
+export interface VaTask {
+  id: number;
+  title: string;
+  kind: string;
+  due_at: string | null;
+  state: string;
+  priority: number;
+  who: string | null;
+  source: string;
+  reminder_id: number | null;
+  followup_id: number | null;
+  snooze_until: string | null;
+  completed_at: string | null;
+  created_at: string;
+}
+
 function all<T>(sql: string, ...params: unknown[]): T[] {
   return db().prepare(sql).all(...(params as never[])) as unknown as T[];
 }
@@ -84,6 +100,24 @@ export function ensureVaTables(): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS va_tasks (
+      id           INTEGER PRIMARY KEY,
+      title        TEXT NOT NULL,
+      kind         TEXT NOT NULL DEFAULT 'task',
+      due_at       TEXT,
+      state        TEXT NOT NULL DEFAULT 'open',
+      priority     INTEGER NOT NULL DEFAULT 0,
+      who          TEXT,
+      source       TEXT NOT NULL DEFAULT 'chat',
+      reminder_id  INTEGER REFERENCES reminders(id) ON DELETE SET NULL,
+      followup_id  INTEGER REFERENCES followups(id) ON DELETE SET NULL,
+      snooze_until TEXT,
+      completed_at TEXT,
+      created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_va_tasks_open ON va_tasks (state, due_at);
+
     CREATE TABLE IF NOT EXISTS va_turns (
       id         INTEGER PRIMARY KEY,
       input      TEXT NOT NULL,
@@ -93,6 +127,7 @@ export function ensureVaTables(): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+  migrateRemindersAndFollowupsIntoTasks();
 }
 
 export function createCalendarEvent(row: {
@@ -188,7 +223,7 @@ export function createReminder(row: {
   channel?: string;
   relatedEventId?: number | null;
 }): Reminder {
-  return one<Reminder>(
+  const reminder = one<Reminder>(
     `INSERT INTO reminders (title, body, due_at, channel, related_event_id)
      VALUES (?, ?, ?, ?, ?)
      RETURNING *`,
@@ -198,6 +233,8 @@ export function createReminder(row: {
     row.channel ?? 'email',
     row.relatedEventId ?? null,
   );
+  upsertTaskFromReminder(reminder);
+  return reminder;
 }
 
 export function listReminders(limit = 30): Reminder[] {
@@ -268,13 +305,158 @@ export function createFollowUp(row: {
   dueAt?: string | null;
   channel?: string | null;
 }): FollowUp {
-  return one<FollowUp>(
+  const follow = one<FollowUp>(
     `INSERT INTO followups (who, what, due_at, channel) VALUES (?, ?, ?, ?) RETURNING *`,
     row.who,
     row.what,
     row.dueAt ?? null,
     row.channel ?? null,
   );
+  upsertTaskFromFollowUp(follow);
+  return follow;
+}
+
+function migrateRemindersAndFollowupsIntoTasks(): void {
+  const missingReminders = all<Reminder>(
+    `SELECT r.* FROM reminders r
+     LEFT JOIN va_tasks t ON t.reminder_id = r.id
+     WHERE t.id IS NULL`,
+  );
+  for (const r of missingReminders) upsertTaskFromReminder(r, 'migrate');
+
+  const missingFollowups = all<FollowUp>(
+    `SELECT f.* FROM followups f
+     LEFT JOIN va_tasks t ON t.followup_id = f.id
+     WHERE t.id IS NULL`,
+  );
+  for (const f of missingFollowups) upsertTaskFromFollowUp(f, 'migrate');
+}
+
+function upsertTaskFromReminder(r: Reminder, source = 'chat'): void {
+  const existing = all<VaTask>(`SELECT * FROM va_tasks WHERE reminder_id = ? LIMIT 1`, r.id)[0];
+  const state =
+    r.state === 'sent' || r.state === 'cancelled' ? 'done'
+    : r.state === 'failed' ? 'open'
+    : r.state === 'scheduled' || r.state === 'sending' ? 'open'
+    : 'open';
+  if (existing) {
+    db().prepare(
+      `UPDATE va_tasks SET title = ?, due_at = ?, state = CASE WHEN state = 'done' THEN state ELSE ? END
+       WHERE id = ?`,
+    ).run(r.title, r.due_at, state, existing.id);
+    return;
+  }
+  db().prepare(
+    `INSERT INTO va_tasks (title, kind, due_at, state, source, reminder_id)
+     VALUES (?, 'reminder', ?, ?, ?, ?)`,
+  ).run(r.title, r.due_at, state, source, r.id);
+}
+
+function upsertTaskFromFollowUp(f: FollowUp, source = 'chat'): void {
+  const existing = all<VaTask>(`SELECT * FROM va_tasks WHERE followup_id = ? LIMIT 1`, f.id)[0];
+  const title = `${f.who}: ${f.what}`;
+  const state = f.state === 'open' ? 'open' : 'done';
+  if (existing) {
+    db().prepare(
+      `UPDATE va_tasks SET title = ?, who = ?, due_at = ?, state = CASE WHEN state = 'done' THEN state ELSE ? END
+       WHERE id = ?`,
+    ).run(title, f.who, f.due_at, state, existing.id);
+    return;
+  }
+  db().prepare(
+    `INSERT INTO va_tasks (title, kind, due_at, state, who, source, followup_id)
+     VALUES (?, 'follow_up', ?, ?, ?, ?, ?)`,
+  ).run(title, f.due_at, state, f.who, source, f.id);
+}
+
+export function createTask(row: {
+  title: string;
+  kind?: string;
+  dueAt?: string | null;
+  who?: string | null;
+  source?: string;
+  priority?: number;
+}): VaTask {
+  return one<VaTask>(
+    `INSERT INTO va_tasks (title, kind, due_at, who, source, priority)
+     VALUES (?, ?, ?, ?, ?, ?)
+     RETURNING *`,
+    row.title.trim(),
+    row.kind ?? 'task',
+    row.dueAt ?? null,
+    row.who ?? null,
+    row.source ?? 'chat',
+    row.priority ?? 0,
+  );
+}
+
+export function listOpenTasks(limit = 40): VaTask[] {
+  return all<VaTask>(
+    `SELECT * FROM va_tasks
+     WHERE state IN ('open', 'snoozed')
+     ORDER BY priority DESC,
+       CASE WHEN due_at IS NULL THEN 1 ELSE 0 END,
+       due_at ASC,
+       id ASC
+     LIMIT ?`,
+    limit,
+  );
+}
+
+export function listDoneTasks(limit = 10): VaTask[] {
+  return all<VaTask>(
+    `SELECT * FROM va_tasks WHERE state = 'done' ORDER BY COALESCE(completed_at, created_at) DESC LIMIT ?`,
+    limit,
+  );
+}
+
+export function getTask(id: number): VaTask | undefined {
+  return all<VaTask>(`SELECT * FROM va_tasks WHERE id = ?`, id)[0];
+}
+
+export function completeTask(id: number): VaTask | undefined {
+  db().prepare(
+    `UPDATE va_tasks SET state = 'done', completed_at = datetime('now') WHERE id = ? AND state != 'done'`,
+  ).run(id);
+  const task = getTask(id);
+  if (task?.followup_id) {
+    db().prepare(`UPDATE followups SET state = 'done' WHERE id = ?`).run(task.followup_id);
+  }
+  return task;
+}
+
+export function snoozeTask(id: number, untilIso: string): VaTask | undefined {
+  db().prepare(
+    `UPDATE va_tasks SET state = 'snoozed', snooze_until = ?, due_at = ? WHERE id = ?`,
+  ).run(untilIso, untilIso, id);
+  return getTask(id);
+}
+
+export function setTaskPriorities(orderedIds: number[]): void {
+  const n = orderedIds.length;
+  const stmt = db().prepare(`UPDATE va_tasks SET priority = ? WHERE id = ?`);
+  orderedIds.forEach((id, i) => stmt.run(n - i, id));
+}
+
+/** Rank open tasks: overdue first, then due soon, then priority, never drop any. */
+export function prioritiseOpenTasks(): VaTask[] {
+  const open = listOpenTasks(80);
+  const now = Date.now();
+  const scored = open.map((t) => {
+    const due = t.due_at ? Date.parse(t.due_at) : NaN;
+    let score = t.priority * 10;
+    if (Number.isFinite(due)) {
+      const hours = (due - now) / 3_600_000;
+      if (hours < 0) score += 1000 + Math.min(500, -hours);
+      else if (hours < 24) score += 200 - hours;
+      else score += Math.max(0, 100 - hours / 24);
+    }
+    if (t.kind === 'follow_up') score += 15;
+    return { t, score };
+  });
+  scored.sort((a, b) => b.score - a.score);
+  setTaskPriorities(scored.map((s) => s.t.id));
+  return listOpenTasks(80);
 }
 
 export function listOpenFollowUps(limit = 30): FollowUp[] {

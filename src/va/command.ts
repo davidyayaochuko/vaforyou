@@ -20,7 +20,27 @@ import { fileURLToPath } from 'node:url';
 import { DateTime } from 'luxon';
 import { convertWallTime, homeTimezone } from './timezone.ts';
 import { parseMeetingInvite } from './invite.ts';
-import { askWorkspace, isWorkspaceAsk, workspaceConfigured, workspaceSetupReply } from './workspace.ts';
+import {
+  askWorkspace,
+  isInboxTriageAsk,
+  isWorkspaceAsk,
+  workspaceConfigured,
+  workspaceSetupReply,
+} from './workspace.ts';
+import {
+  askSlack,
+  isSlackAsk,
+  slackConfigured,
+  slackSetupReply,
+} from './slack.ts';
+import {
+  askBrowserAgency,
+  isBrowserAgencyAsk,
+} from './browser-agency.ts';
+import {
+  askMeetings,
+  isMeetingsAsk,
+} from './meetings.ts';
 import {
   clearPending,
   conversationBlock,
@@ -240,7 +260,8 @@ function loadFunkeVoice(): string {
   if (existsSync(learned)) chunks.push(readFileSync(learned, 'utf8'));
   chunks.push(replyStylePromptBlock());
   const text = chunks.join('\n\n').trim();
-  return (text || 'You are Funke. Speak briefly and clearly. No jargon dumps.').slice(0, 6_000);
+  // Room for fluent/Pidgin voice + Albion primer; KB hits are appended separately.
+  return (text || 'You are Funke. Speak briefly and clearly. No jargon dumps.').slice(0, 10_000);
 }
 
 async function parseCommand(text: string): Promise<ParsedCommand> {
@@ -251,6 +272,14 @@ async function parseCommand(text: string): Promise<ParsedCommand> {
   const pending = getPending();
   const { memoryBlock } = await import('./memory.ts');
   const memory = memoryBlock(10);
+
+  const kbHits = lookupKb(text, 6);
+  const kbBlock = kbHits.length
+    ? [
+        'Verified local knowledge (prefer over guessing; paraphrase in Funke voice; do not invent beyond this):',
+        ...kbHits.map((h) => `- ${h.question}: ${h.answer.slice(0, 700)}`),
+      ].join('\n')
+    : '';
 
   const flat = await ai.json<FlatParsed>({
     system: [
@@ -266,16 +295,20 @@ async function parseCommand(text: string): Promise<ParsedCommand> {
       'Never ask how long a meeting is. Default calendar_remind_minutes_before to 60 and leave calendar_end empty; the app adds one hour.',
       'If they give a time but no topic for a reminder, set needs_clarification true and ask what it is about. Do not invent a title.',
       'If the user is answering your last clarifying question with a short title or time, MERGE with the pending ask.',
-      'If they change topic (list meetings, what is on my plate, draft a post, help), do NOT keep the pending ask. Set the new intent. Never use their new question as a calendar or reminder title.',
+      'If they change topic (list meetings, what is on my plate, draft a post, help, Albion / game ask), do NOT keep the pending ask. Set the new intent. Never use their new question as a calendar or reminder title.',
       'Reschedule / move / change time of a meeting → calendar_create with the new start time. Prefer the real meeting title from conversation if known; otherwise leave calendar_title empty and ask which meeting.',
       'Ask at most one clarifying question. Required fields: remind needs title+when; calendar needs title+start.',
-      'reply must be natural speech for the user. Never mention JSON, schemas, or API errors.',
-      'Do not invent prices, policies, or deadlines. Those come from the knowledge base path, not you.',
+      'reply must be natural speech for the user: fluent Nigerian English, light Pidgin when casual. Never mention JSON, schemas, or API errors.',
+      'Do not invent prices, policies, deadlines, or live game market rates. Those come from the knowledge base path, not you.',
+      'Albion / MMO questions: answer from verified local knowledge in voice. Intent can be help/unknown with a full reply; do not force calendar.',
       pending
         ? `Pending ask: intent=${pending.intent} partial=${JSON.stringify(pending.partial)}`
         : 'No pending ask.',
       memory ? `Durable memory (use when relevant):\n${memory}` : 'No durable memory notes yet.',
-    ].join('\n'),
+      kbBlock,
+    ]
+      .filter(Boolean)
+      .join('\n'),
     prompt: [
       history ? `Recent conversation:\n${history}\n` : '',
       `Latest user message:\n${text}`,
@@ -655,7 +688,7 @@ export async function handleVaCommand(text: string): Promise<VaResult> {
     return { ok: true, intent: 'unknown', reply: recalled.reply, detail: recalled.detail };
   }
 
-  const research = tryResearchAsk(trimmed);
+  const research = await tryResearchAsk(trimmed);
   if (research) {
     pushTurn('funke', research.reply, 'help');
     logChatExchange(trimmed, 'help', research.reply, research.detail);
@@ -693,14 +726,94 @@ export async function handleVaCommand(text: string): Promise<VaResult> {
     return result;
   }
 
-  // Gmail, Drive, Docs, and contacts go through the Workspace MCP server.
-  if (isWorkspaceAsk(trimmed)) {
-    const result = workspaceConfigured()
-      ? await askWorkspace(trimmed)
-      : { ok: false, reply: workspaceSetupReply() };
-    const va: VaResult = { ok: result.ok, intent: 'unknown', reply: result.reply };
+  // Meeting notes / prep (Vexa). Explicit opt-in only when the connector is live.
+  if (isMeetingsAsk(trimmed)) {
+    const result = await askMeetings(trimmed);
+    const va: VaResult = {
+      ok: result.ok,
+      intent: 'unknown',
+      reply: result.reply,
+      detail: { meetings: true },
+    };
     pushTurn('funke', va.reply, va.intent);
-    logChatExchange(trimmed, va.intent, va.reply, { workspace: true });
+    logChatExchange(trimmed, va.intent, va.reply, { meetings: true });
+    return va;
+  }
+
+  // General browser agency (forms / booking research). Never social profiles.
+  if (isBrowserAgencyAsk(trimmed)) {
+    const result = await askBrowserAgency(trimmed);
+    const va: VaResult = {
+      ok: result.ok,
+      intent: 'unknown',
+      reply: result.reply,
+      detail: { browserAgency: true },
+    };
+    pushTurn('funke', va.reply, va.intent);
+    logChatExchange(trimmed, va.intent, va.reply, { browserAgency: true });
+    return va;
+  }
+
+  // Slack: digest / draft immediately; sends become approval cards.
+  if (isSlackAsk(trimmed)) {
+    const result = slackConfigured()
+      ? await askSlack(trimmed)
+      : { ok: false as const, reply: slackSetupReply() };
+    const va: VaResult = {
+      ok: result.ok,
+      intent: 'unknown',
+      reply: result.reply,
+      detail: result.approval
+        ? {
+            slack: true,
+            approval: result.approval,
+            approvals: [result.approval],
+          }
+        : { slack: true },
+    };
+    pushTurn('funke', va.reply, va.intent);
+    logChatExchange(trimmed, va.intent, va.reply, {
+      slack: true,
+      approvalId: result.approval?.id ?? null,
+    });
+    return va;
+  }
+
+  // Gmail, Drive, Docs, and contacts go through the Workspace MCP server.
+  // Writes become approval cards; reads run immediately.
+  if (isWorkspaceAsk(trimmed)) {
+    const askText = isInboxTriageAsk(trimmed)
+      ? [
+          'Triage my recent Gmail inbox.',
+          'Search unread and recent mail.',
+          'Group into three lists with short bullets:',
+          '1) Needs you (reply or decision)',
+          '2) FYI (read later)',
+          '3) Noise (newsletters / automated)',
+          'Do not send or delete anything. Read and summarise only.',
+          `Owner phrasing: ${trimmed}`,
+        ].join('\n')
+      : trimmed;
+    const result = workspaceConfigured()
+      ? await askWorkspace(askText)
+      : { ok: false as const, reply: workspaceSetupReply() };
+    const va: VaResult = {
+      ok: result.ok,
+      intent: 'unknown',
+      reply: result.reply,
+      detail: result.approval
+        ? {
+            workspace: true,
+            approval: result.approval,
+            approvals: [result.approval],
+          }
+        : { workspace: true },
+    };
+    pushTurn('funke', va.reply, va.intent);
+    logChatExchange(trimmed, va.intent, va.reply, {
+      workspace: true,
+      approvalId: result.approval?.id ?? null,
+    });
     return va;
   }
 
@@ -731,6 +844,24 @@ export async function handleVaCommand(text: string): Promise<VaResult> {
     pushTurn('funke', result.reply, result.intent);
     logChatExchange(trimmed, result.intent, result.reply, result.detail ?? {});
     return result;
+  }
+
+  // Rank open tasks without LLM.
+  if (/^(prioriti[sz]e(\s+my)?\s+day|rank\s+my\s+(tasks|day|plate))\??$/i.test(trimmed)) {
+    clearPending();
+    const { prioritiseOpenTasks } = await import('./store.ts');
+    const ranked = prioritiseOpenTasks();
+    const lines = ranked.length
+      ? [
+          'Here’s the order I’d work today (overdue and sooner first). Nothing was dropped.',
+          '',
+          ...ranked.slice(0, 12).map((t, i) => `${i + 1}. ${t.title}${t.due_at ? ` · ${friendlyWhen(t.due_at)}` : ''}`),
+        ]
+      : ['Nothing open to rank. Add a reminder or follow-up first.'];
+    const reply = lines.join('\n');
+    pushTurn('funke', reply, 'status');
+    logChatExchange(trimmed, 'status', reply, { prioritised: ranked.map((t) => t.id) });
+    return { ok: true, intent: 'status', reply, detail: { tasks: ranked } };
   }
 
   // Deterministic status / plate (no LLM). Skip if the message also packs other tasks.
@@ -1201,6 +1332,8 @@ function helpReply(prefix?: string | null): string {
     '• What is on my plate?',
     '• Daily summary / What did I miss?',
     '• Check my Gmail or Drive (needs the Workspace MCP server)',
+    '• What did I miss on Slack? (needs SLACK_USER_TOKEN)',
+    '• Research X (needs private SearXNG / SEARXNG_URL)',
     '',
     'Want me to walk you through one? Say calendar, reminder, or draft.',
     'There is no separate Reminders menu. Use chat, or the Cal / Ok tabs in the dock.',
@@ -1277,17 +1410,29 @@ function tryResolvePendingRemind(text: string): ParsedCommand | null {
   };
 }
 
-/** Competitor / research asks: memory + KB only. Never invent sources. */
-function tryResearchAsk(text: string): { reply: string; detail: unknown } | null {
+/**
+ * Competitor / research asks.
+ * With SEARXNG_URL: private web search; every web bullet has a URL.
+ * Without / down: memory + KB only. Never invent sources or funding figures.
+ */
+async function tryResearchAsk(text: string): Promise<{ reply: string; detail: unknown } | null> {
   const t = text.trim();
   if (
     !/\b(research|competitor|look up|brief (me )?on|funding|raised)\b/i.test(t)
     && !/\bwhat do (we|you) know about\b/i.test(t)
+    && !/\balbion(\s+online)?\b/i.test(t)
   ) {
     return null;
   }
   // Skip preferences / self / draft / remind.
   if (/\b(draft|remind|schedule|post\s*:|about me|my preference)\b/i.test(t)) return null;
+
+  const {
+    extractResearchQuery,
+    formatWebHits,
+    researchConfigured,
+    searchSearxng,
+  } = await import('./research.ts');
 
   const rows = recall({ limit: 40 });
   const tokens = t
@@ -1301,29 +1446,84 @@ function tryResearchAsk(text: string): { reply: string; detail: unknown } | null
   });
 
   const kbHits = lookupKb(t, 3);
+  const query = extractResearchQuery(t);
+  const lines: string[] = [];
+  const detail: Record<string, unknown> = {
+    research: true,
+    memoryIds: hits.map((h) => h.id),
+  };
 
-  if (!hits.length && !kbHits.length) {
+  if (researchConfigured()) {
+    const web = await searchSearxng(query);
+    detail.web = web.ok
+      ? { query: web.query, hitCount: web.hits.length, urls: web.hits.map((h) => h.url) }
+      : { query: web.query, error: web.error };
+
+    if (!web.ok) {
+      lines.push(
+        `I could not reach the private search instance (${web.error})`,
+        '',
+      );
+    } else if (!web.hits.length) {
+      lines.push(`Web search for “${web.query}” returned no results.`, '');
+    } else {
+      lines.push(`Web results for “${web.query}” (private SearXNG; each line has a source):`, '');
+      lines.push(...formatWebHits(web.hits));
+      lines.push('');
+    }
+  }
+
+  if (hits.length || kbHits.length) {
+    lines.push(
+      researchConfigured()
+        ? 'Also on file locally (not web-sourced):'
+        : 'Here is what I have on file (local notes only). I did not search the web.',
+      '',
+    );
+    for (const h of hits.slice(0, 6)) {
+      const flag = /unverified/i.test(h.value) ? ' [UNVERIFIED]' : '';
+      lines.push(`• ${h.value}${flag}${h.contact ? ` (${h.contact})` : ''}`);
+    }
+    for (const k of kbHits.slice(0, 3)) {
+      lines.push(`• KB · ${k.question}: ${k.answer.slice(0, 280)}`);
+    }
+    lines.push('');
+  }
+
+  const webOk =
+    researchConfigured()
+    && detail.web
+    && typeof detail.web === 'object'
+    && detail.web !== null
+    && 'hitCount' in detail.web
+    && Number((detail.web as { hitCount?: number }).hitCount) > 0;
+
+  if (!webOk && !hits.length && !kbHits.length) {
+    if (researchConfigured()) {
+      lines.push(
+        'No verified local notes either, so I will not invent sources or funding figures.',
+        'Say “Remember that …” with what you know, or add a ## section under knowledge/. Mark anything uncertain as UNVERIFIED.',
+      );
+      return { reply: lines.join('\n').trim(), detail: { ...detail, hits: [] } };
+    }
     return {
       reply:
         'I do not have verified notes on that in memory or the knowledge base, so I will not invent sources or funding figures. '
-        + 'Say “Remember that RivalCo …” with what you know, or add a ## section under knowledge/. Mark anything uncertain as UNVERIFIED.',
+        + 'Say “Remember that RivalCo …” with what you know, or add a ## section under knowledge/. Mark anything uncertain as UNVERIFIED. '
+        + 'For live web research, set SEARXNG_URL after `docker compose -f deploy/searxng/compose.yml up -d`.',
       detail: { research: true, hits: [] },
     };
   }
 
-  const lines: string[] = [
-    'Here is what I have on file (local notes only). I did not search the web.',
-    '',
-  ];
-  for (const h of hits.slice(0, 6)) {
-    const flag = /unverified/i.test(h.value) ? ' [UNVERIFIED]' : '';
-    lines.push(`• ${h.value}${flag}${h.contact ? ` (${h.contact})` : ''}`);
+  if (!researchConfigured()) {
+    lines.push('Anything not listed here is unknown. Do not treat this as web-sourced research.');
+  } else if (!webOk) {
+    lines.push('Web search did not add citations. I will not invent figures beyond what is linked or on file.');
+  } else {
+    lines.push('I only keep claims that have a URL above or an on-file note. Unsourced web claims are dropped.');
   }
-  for (const k of kbHits.slice(0, 3)) {
-    lines.push(`• KB · ${k.question}: ${k.answer.slice(0, 280)}`);
-  }
-  lines.push('', 'Anything not listed here is unknown. Do not treat this as web-sourced research.');
-  return { reply: lines.join('\n'), detail: { research: true, memoryIds: hits.map((h) => h.id) } };
+
+  return { reply: lines.join('\n').trim(), detail };
 }
 
 function weekdayOffset(name: string, from: DateTime): number {

@@ -29,7 +29,7 @@ export const env = {
   // High-risk social features. Off unless the operator opts in.
   outreachEnabled: bool('OUTREACH_ENABLED', false),
   engageFeedEnabled: bool('ENGAGE_FEED_ENABLED', false),
-  // Workspace MCP writes stay off until the approval queue can gate them.
+  // Workspace MCP writes: when true, still go through Approvals (never auto).
   workspaceMcpWrites: bool('WORKSPACE_MCP_WRITES', false),
   anthropicApiKey: str('ANTHROPIC_API_KEY', ''),
   // Paid models are opt-in. A key sitting in
@@ -40,13 +40,23 @@ export const env = {
   // Free lane, and the default: these posts are short and template-bound.
   groqApiKey: str('GROQ_API_KEY', ''),
   groqModel: str('GROQ_MODEL', DEFAULT_GROQ_MODEL),
-  // Groq Whisper for mic input. Audio is transcribed in memory and discarded.
+  // xAI Grok (OpenAI-compatible). GROK_API_KEY is accepted as an alias.
+  // Used when set and Groq is not. Force with AI_PROVIDER=xai.
+  xaiApiKey: str('XAI_API_KEY', '') || str('GROK_API_KEY', ''),
+  xaiModel: str('XAI_MODEL', '') || str('GROK_MODEL', 'grok-4.7'),
+  // Optional force: anthropic | groq | xai | mock (empty = auto pick).
+  aiProvider: str('AI_PROVIDER', ''),
+  // Mic STT. Prefer Groq Whisper when GROQ_API_KEY is set; else xAI STT when
+  // XAI_API_KEY is set (same key as Grok chat). Audio stays in memory only.
   groqSttModel: str('GROQ_STT_MODEL', 'whisper-large-v3-turbo'),
+  xaiSttModel: str('XAI_STT_MODEL', 'grok-voice-transcribe-2.0'),
+  // Grok TTS voice id (ara = warm; eve = energetic). Same XAI_API_KEY as chat.
+  xaiTtsVoice: str('XAI_TTS_VOICE', 'ara'),
   // Optional Azure Neural TTS (Nigerian English). Text leaves the machine when used.
   azureSpeechKey: str('AZURE_SPEECH_KEY', ''),
   azureSpeechRegion: str('AZURE_SPEECH_REGION', ''),
   azureTtsVoice: str('AZURE_TTS_VOICE', 'en-NG-EzinneNeural'),
-  // browser | azure | auto (azure when keys set, else browser)
+  // browser | azure | xai | auto (azure → xai → browser)
   ttsProvider: str('TTS_PROVIDER', 'auto'),
   headless: bool('HEADLESS', false),
   paused: bool('PAUSED', false),
@@ -64,6 +74,19 @@ export const env = {
   // Example: uvx workspace-mcp   or   npx -y @aaronsb/google-workspace-mcp
   workspaceMcpCommand: str('WORKSPACE_MCP_COMMAND', ''),
   workspaceMcpArgs: str('WORKSPACE_MCP_ARGS', ''),
+  // Private SearXNG for web research (Workstream G). Empty = memory/KB only.
+  // Example: http://127.0.0.1:8080 after deploy/searxng/compose.yml
+  searxngUrl: str('SEARXNG_URL', ''),
+  searxngTimeoutMs: Number(str('SEARXNG_TIMEOUT_MS', '12000')),
+  // Slack user OAuth token (xoxp-…). Acts as the owner; treat like a password.
+  slackUserToken: str('SLACK_USER_TOKEN', ''),
+  // Playwright MCP for general browser agency (not social profiles). Spike.
+  // Example: PLAYWRIGHT_MCP_COMMAND=npx  PLAYWRIGHT_MCP_ARGS=@playwright/mcp@latest
+  playwrightMcpCommand: str('PLAYWRIGHT_MCP_COMMAND', ''),
+  playwrightMcpArgs: str('PLAYWRIGHT_MCP_ARGS', ''),
+  // Self-hosted Vexa for meeting notes (Workstream E stub).
+  vexaApiUrl: str('VEXA_API_URL', ''),
+  vexaApiKey: str('VEXA_API_KEY', ''),
 };
 
 export type Env = typeof env;

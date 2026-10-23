@@ -406,15 +406,58 @@ async function executePayload(
     case 'content.publish':
       return executeContentQueue(payload);
     case 'workspace.write':
-      return {
-        ok: false,
-        reply: 'Workspace writes stay locked until WORKSPACE_MCP_WRITES is enabled and gated end-to-end.',
-      };
+      return executeWorkspaceWrite(payload);
+    case 'slack.send':
+      return executeSlackSend(payload);
     case 'email.send':
       return { ok: false, reply: 'Email send through the approval queue is not wired yet beyond reminders.' };
     default:
       return { ok: false, reply: `No executor for action type “${actionType}”.` };
   }
+}
+
+async function executeSlackSend(
+  payload: Record<string, unknown>,
+): Promise<{ ok: boolean; reply: string; detail?: unknown }> {
+  const channel = String(payload.channel ?? '').trim();
+  const text = String(payload.text ?? '').trim();
+  const threadTs = payload.threadTs != null ? String(payload.threadTs) : undefined;
+  const { postSlackMessage, slackConfigured } = await import('../va/slack.ts');
+  if (!slackConfigured()) {
+    return { ok: false, reply: 'SLACK_USER_TOKEN is not set. I did not send anything.' };
+  }
+  return postSlackMessage({ channel, text, threadTs });
+}
+
+async function executeWorkspaceWrite(
+  payload: Record<string, unknown>,
+): Promise<{ ok: boolean; reply: string; detail?: unknown }> {
+  const { features } = await import('../config/features.ts');
+  if (!features.workspaceMcpWrites) {
+    return {
+      ok: false,
+      reply: 'Workspace writes are off (WORKSPACE_MCP_WRITES=false). I did not run that tool.',
+    };
+  }
+  const tool = String(payload.tool ?? '').trim();
+  if (!tool) return { ok: false, reply: 'Workspace write payload is missing the tool name.' };
+  const args =
+    payload.arguments && typeof payload.arguments === 'object' && !Array.isArray(payload.arguments)
+      ? (payload.arguments as Record<string, unknown>)
+      : {};
+  const { callWorkspaceTool, isWorkspaceWriteTool } = await import('../va/workspace.ts');
+  if (!isWorkspaceWriteTool(tool)) {
+    return {
+      ok: false,
+      reply: `“${tool}” does not look like a write tool. Refusing to run it through the write executor.`,
+    };
+  }
+  const result = await callWorkspaceTool(tool, args);
+  return {
+    ok: result.ok,
+    reply: result.reply,
+    detail: { tool, arguments: args },
+  };
 }
 
 async function executeCalendar(

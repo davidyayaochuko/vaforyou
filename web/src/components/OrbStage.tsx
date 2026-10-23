@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useState } from 'react';
 import VoiceOrb, { type OrbMode } from './VoiceOrb';
 import ActionCluster from './ActionCluster';
 import { voice, type VoiceSnapshot, type VoiceState } from '../lib/voice';
@@ -24,25 +24,23 @@ function greeting(): string {
 function headline(s: VoiceSnapshot): string {
   switch (s.state) {
     case 'listening':
-      return s.talkMode === 'conversation' ? 'I’m listening. Keep going.' : 'I’m listening.';
+      return 'I’m listening. Keep going.';
     case 'hearing':
       return 'Go on…';
     case 'thinking':
       return 'Thinking…';
     case 'speaking':
-      return s.talkMode === 'conversation'
-        ? 'Speaking. Talk over me anytime.'
-        : 'Speaking. Talk over me to interrupt.';
+      return 'Speaking. Talk over me anytime.';
     default:
       return `${greeting()} I’m Funke.`;
   }
 }
 
 function idleHint(): string {
-  return 'Hold Space or the orb to send one line. Tap Talk for a continuous conversation. Or open Chat.';
+  return 'Press Space, tap the orb, or tap Talk to start. Pause when you finish a thought. Press again to stop. Or open Chat.';
 }
 
-function canUseHoldShortcut(target: EventTarget | null): boolean {
+function canUseTalkShortcut(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
   if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return false;
   if (el?.isContentEditable) return false;
@@ -52,15 +50,13 @@ function canUseHoldShortcut(target: EventTarget | null): boolean {
 
 export default function OrbStage({ size = 400 }: Props) {
   const [snap, setSnap] = useState<VoiceSnapshot | null>(null);
-  const spaceHeld = useRef(false);
-  const orbHeld = useRef(false);
 
   useEffect(() => {
     const v = voice(); // also publishes window.__funkeVoice for harness / debug
     return v.subscribe(setSnap);
   }, []);
 
-  // Optional QA harness: /?harness=1 runs all four personas across both voice modes.
+  // Optional QA harness: /?harness=1 runs all four personas across voice turns.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (new URLSearchParams(window.location.search).get('harness') !== '1') return;
@@ -79,91 +75,49 @@ export default function OrbStage({ size = 400 }: Props) {
     };
   }, []);
 
-  // Space: push-to-talk only when not already in a conversation session.
+  // Space toggles conversation: press once to open the mic, again to close. No hold.
   useEffect(() => {
     const onDown = (e: KeyboardEvent) => {
       if (e.code !== 'Space' || e.repeat) return;
-      if (!canUseHoldShortcut(e.target)) return;
+      if (!canUseTalkShortcut(e.target)) return;
       e.preventDefault();
-      const live = voice().snapshot;
-      if (live.talkOn && live.talkMode === 'conversation') return;
-      if (spaceHeld.current) return;
-      spaceHeld.current = true;
-      void voice().startTalk('hold');
-    };
-    const onUp = (e: KeyboardEvent) => {
-      if (e.code !== 'Space') return;
-      if (!spaceHeld.current) return;
-      spaceHeld.current = false;
-      e.preventDefault();
-      void voice().releaseTalk();
-    };
-    const onBlur = () => {
-      if (!spaceHeld.current) return;
-      spaceHeld.current = false;
-      void voice().releaseTalk();
+      void voice().toggleTalk();
     };
     window.addEventListener('keydown', onDown);
-    window.addEventListener('keyup', onUp);
-    window.addEventListener('blur', onBlur);
-    return () => {
-      window.removeEventListener('keydown', onDown);
-      window.removeEventListener('keyup', onUp);
-      window.removeEventListener('blur', onBlur);
-    };
+    return () => window.removeEventListener('keydown', onDown);
   }, []);
-
-  const onOrbPointerDown = (e: ReactPointerEvent<HTMLButtonElement>) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    const live = voice().snapshot;
-    // Conversation already owns the mic. A click should not start a hold session.
-    if (live.talkOn && live.talkMode === 'conversation') return;
-    orbHeld.current = true;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    void voice().startTalk('hold');
-  };
-
-  const onOrbPointerUp = (e: ReactPointerEvent<HTMLButtonElement>) => {
-    if (!orbHeld.current) return;
-    orbHeld.current = false;
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch {
-      /* already released */
-    }
-    void voice().releaseTalk();
-  };
 
   const s = snap ?? voice().snapshot;
   const mode = orbMode(s.state);
   const caption = s.state === 'thinking' || s.state === 'speaking' ? s.reply || s.transcript : s.transcript;
-  const holding = spaceHeld.current || orbHeld.current;
   const inConversation = s.talkOn && s.talkMode === 'conversation';
+  const singing = s.state === 'speaking' && s.lyricLines.length > 0;
+  const lyricIndex = Math.min(s.lyricIndex, Math.max(0, s.lyricLines.length - 1));
+  const lyricPast = lyricIndex > 0 ? s.lyricLines[lyricIndex - 1] : '';
+  const lyricNow = s.lyricLines[lyricIndex] ?? '';
+  const lyricNext = lyricIndex < s.lyricLines.length - 1 ? s.lyricLines[lyricIndex + 1] : '';
 
   return (
     <div className={`orb-stage orb-stage--${mode}`}>
       <button
         type="button"
         className="orb-hit"
-        aria-label={
-          inConversation
-            ? 'Conversation active. Use Talk to stop.'
-            : holding
-              ? 'Release to send'
-              : 'Hold to talk'
-        }
+        aria-label={inConversation ? 'Stop conversation' : 'Start conversation'}
         aria-pressed={s.talkOn}
-        onPointerDown={onOrbPointerDown}
-        onPointerUp={onOrbPointerUp}
-        onPointerCancel={onOrbPointerUp}
+        onClick={() => void voice().toggleTalk()}
       >
         <VoiceOrb mode={mode} size={size} levelSource={() => voice().level} />
       </button>
 
-      <div className="orb-copy" aria-live="polite">
+      <div className="orb-copy" aria-live="off">
         <p className="orb-label">{headline(s)}</p>
-        {caption ? (
+        {singing ? (
+          <div className="lyric">
+            <p className="lyric-line is-past" aria-hidden="true">{lyricPast}</p>
+            <p className="lyric-line is-now" aria-live="polite" key={lyricIndex}>{lyricNow}</p>
+            <p className="lyric-line is-next" aria-hidden="true">{lyricNext}</p>
+          </div>
+        ) : caption ? (
           <p className="orb-caption" title={caption}>
             {s.state === 'thinking' || s.state === 'speaking' ? caption : `“${caption}”`}
           </p>
@@ -171,10 +125,8 @@ export default function OrbStage({ size = 400 }: Props) {
           <p className="orb-sub">
             {s.notice ||
               (inConversation
-                ? 'Pause when you finish a thought. I’ll answer, then listen again.'
-                : s.talkOn
-                  ? 'Release Space or the orb to send. Voice can’t approve.'
-                  : idleHint())}
+                ? 'Pause when you finish a thought. I’ll answer, then listen again. Press Space or Talk to stop.'
+                : idleHint())}
           </p>
         )}
         {caption && s.notice ? <p className="orb-sub">{s.notice}</p> : null}

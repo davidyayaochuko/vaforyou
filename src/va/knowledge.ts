@@ -122,7 +122,14 @@ export function lookupKb(query: string, limit = 3): KbEntry[] {
   ensureKbTable();
   const tokens = tokenize(query);
   if (!tokens.length) return [];
-  const rows = listKb(undefined, 200);
+  const q = query.toLowerCase();
+  const albionAsk = /\balbion\b|\boutlands\b|\bcaerleon\b|\blymhurst\b|\bzvz\b|\bblack zone|\bred zone|\bmists\b|\bavalon\b|\bdestiny board\b|\bsandbox interactive\b|\blearning points?\b|\bfarming\b|\bcrafting\b/i.test(
+    query,
+  );
+  const cultureAsk = /\bnigeria\b|\bnigerian\b|\bpidgin\b|\bnaija\b|\bjollof\b|\blagos\b|\byoruba\b|\bigbo\b|\bhausa\b|\bafrobeats?\b|\bnollywood\b|\bokada\b/i.test(
+    query,
+  );
+  const rows = listKb(undefined, 400);
   const scored = rows
     .map((row) => {
       const hay = `${row.question} ${row.answer} ${row.tags}`.toLowerCase();
@@ -130,10 +137,14 @@ export function lookupKb(query: string, limit = 3): KbEntry[] {
       for (const t of tokens) {
         if (hay.includes(t)) score += 1;
       }
-      if (row.question.toLowerCase().includes(query.toLowerCase().slice(0, 40))) score += 2;
+      if (row.question.toLowerCase().includes(q.slice(0, 40))) score += 2;
+      if (albionAsk && /albion/i.test(row.tags || row.question)) score += 3;
+      if (cultureAsk && /nigeria|speech-world|pidgin|culture/i.test(row.tags || row.question)) {
+        score += 3;
+      }
       return { row, score };
     })
-    .filter((s) => s.score >= 2)
+    .filter((s) => s.score >= (albionAsk || cultureAsk ? 1 : 2))
     .sort((a, b) => b.score - a.score);
   return scored.slice(0, limit).map((s) => s.row);
 }

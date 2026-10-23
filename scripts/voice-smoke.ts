@@ -66,7 +66,7 @@ async function main(): Promise<void> {
 
   console.log('\n4. STT helpers');
   const status = sttStatus();
-  check('stt status has provider', ['groq', 'browser', 'none'].includes(status.provider), status.provider);
+  check('stt status has provider', ['groq', 'xai', 'browser', 'none'].includes(status.provider), status.provider);
   check('storesAudio false', status.storesAudio === false);
   const decoded = decodeAudioBase64('data:audio/webm;base64,AAAA');
   check('decode data url', decoded.bytes.length > 0 && decoded.mimeType.includes('audio'));
@@ -76,7 +76,12 @@ async function main(): Promise<void> {
     { voiceURI: 'a', name: 'Samantha', lang: 'en-US' },
     { voiceURI: 'b', name: 'Microsoft Ezinne Online (Natural) - English (Nigeria)', lang: 'en-NG' },
   ]);
-  check('prefers en-NG', uri === 'b', uri);
+  check('prefers en-NG Ezinne', uri === 'b', uri);
+  const femaleOverMale = pickDefaultBrowserVoiceUri([
+    { voiceURI: 'm', name: 'Microsoft Abeo Online (Natural) - English (Nigeria)', lang: 'en-NG' },
+    { voiceURI: 'f', name: 'Samantha', lang: 'en-US' },
+  ]);
+  check('prefers female over Abeo', femaleOverMale === 'f', femaleOverMale);
 
   console.log('\n6. Voice cannot approve');
   check('approval prompt detected', isApprovalPrompt('I need your approval before I do that.\nVoice cannot approve.'));

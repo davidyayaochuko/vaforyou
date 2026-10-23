@@ -17,6 +17,7 @@ export async function api<T = unknown>(
   path: string,
   method: 'GET' | 'POST' = 'GET',
   body?: Record<string, unknown>,
+  opts?: { timeoutMs?: number },
 ): Promise<T> {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     throw new Error('You look offline. Nothing was sent.');
@@ -25,11 +26,26 @@ export async function api<T = unknown>(
   const t = token();
   if (t) headers.authorization = `Bearer ${t}`;
 
-  const res = await fetch(path, {
-    method,
-    headers,
-    body: method === 'POST' ? JSON.stringify(body ?? {}) : undefined,
-  });
+  const timeoutMs = opts?.timeoutMs ?? 45_000;
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = setTimeout(() => ctrl?.abort(), timeoutMs);
+
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method,
+      headers,
+      body: method === 'POST' ? JSON.stringify(body ?? {}) : undefined,
+      signal: ctrl?.signal,
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(`That took too long (>${Math.round(timeoutMs / 1000)}s). Try again.`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 
   const data = (await res.json().catch(() => ({}))) as T & { error?: string };
   if (!res.ok) {
@@ -67,11 +83,12 @@ function isRateLimitedReply(reply: string): boolean {
 
 /** Ask Funke, with a short backoff when the AI provider is rate-limiting. */
 export async function askFunkeDetailed(text: string): Promise<AskResult> {
-  const delays = [0, 2500, 6000, 12000];
+  // One quick retry only — long backoff stacks looked like “stuck on Thinking”.
+  const delays = [0, 2000];
   let last: AskResult = { reply: '', approvals: [] };
   for (let i = 0; i < delays.length; i++) {
     if (delays[i]) await new Promise((r) => setTimeout(r, delays[i]));
-    const data = await api<AskResponse>('/api/ask', 'POST', { text });
+    const data = await api<AskResponse>('/api/ask', 'POST', { text }, { timeoutMs: 40_000 });
     const reply =
       typeof data.reply === 'string' && data.reply.trim()
         ? data.reply
@@ -120,16 +137,49 @@ export type FollowUp = {
   state: string;
 };
 
+export type VaTask = {
+  id: number;
+  title: string;
+  kind: string;
+  due_at: string | null;
+  state: string;
+  priority: number;
+  who: string | null;
+};
+
 export type VaStatus = {
   homeTimezone?: string;
   emailConfigured?: boolean;
   reminders?: Reminder[];
   events?: CalendarEvent[];
   followups?: FollowUp[];
+  tasks?: VaTask[];
+  tasksDone?: VaTask[];
+  approvalsPending?: number;
+};
+
+export type TodayPlate = {
+  homeTimezone?: string;
+  tasks?: VaTask[];
+  events?: CalendarEvent[];
+  approvals?: { id: number; title: string; summary: string; actionType: string }[];
+  ranked?: number[];
 };
 
 export async function fetchVaStatus(): Promise<VaStatus> {
   return api<VaStatus>('/api/va/status');
+}
+
+export async function fetchToday(): Promise<TodayPlate> {
+  return api<TodayPlate>('/api/va/today');
+}
+
+export async function completeTask(id: number): Promise<{ ok?: boolean }> {
+  return api('/api/va/tasks/complete', 'POST', { id });
+}
+
+export async function prioritiseTasks(): Promise<{ ok?: boolean; tasks?: VaTask[] }> {
+  return api('/api/va/tasks/prioritise', 'POST', {});
 }
 
 export type Health = {

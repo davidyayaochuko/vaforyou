@@ -1,5 +1,5 @@
 /**
- * Browser harness: each adult persona exercises Spacebar push-to-talk
+ * Browser harness: each adult persona exercises Spacebar toggle
  * and Talk continuous conversation against the live Funke UI.
  */
 import { voice } from './voice';
@@ -65,14 +65,9 @@ export async function runPersonaHarness(): Promise<{
       /Talk|In call/i.test(b.textContent || ''),
     ) as HTMLButtonElement | undefined;
 
-  const spaceDown = () => {
+  const spaceToggle = () => {
     window.dispatchEvent(
       new KeyboardEvent('keydown', { code: 'Space', key: ' ', bubbles: true, cancelable: true }),
-    );
-  };
-  const spaceUp = () => {
-    window.dispatchEvent(
-      new KeyboardEvent('keyup', { code: 'Space', key: ' ', bubbles: true, cancelable: true }),
     );
   };
 
@@ -159,27 +154,27 @@ export async function runPersonaHarness(): Promise<{
   async function runPtt(text: string): Promise<Omit<TurnOut, 'turn' | 'user'>> {
     if (v.snapshot.talkOn) v.stopTalk();
     await sleep(200);
-    spaceDown();
-    const held = await waitFor(() => v.snapshot.talkMode === 'hold', 8000);
-    if (!held) {
+    spaceToggle();
+    const opened = await waitFor(() => v.snapshot.talkMode === 'conversation', 8000);
+    if (!opened) {
       return {
-        modePath: 'spacebar-ptt',
+        modePath: 'spacebar-toggle',
         ok: false,
         talkModeAfter: v.snapshot.talkMode,
         notice: v.snapshot.notice,
         reply: '',
-        issue: 'Space keydown did not enter hold mode',
+        issue: 'Space keydown did not start conversation',
       };
     }
     const t0 = Date.now();
     await v.ask(text);
     const ms = Date.now() - t0;
     const reply = v.snapshot.reply || v.snapshot.notice || '';
-    spaceUp();
-    await waitFor(() => !v.snapshot.talkOn || v.snapshot.talkMode !== 'hold', 5000);
-    if (v.snapshot.talkMode === 'hold') v.stopTalk();
+    spaceToggle();
+    await waitFor(() => !v.snapshot.talkOn, 5000);
+    if (v.snapshot.talkOn) v.stopTalk();
     return {
-      modePath: 'spacebar-ptt',
+      modePath: 'spacebar-toggle',
       ok: !isBad(reply) && !!reply,
       ms,
       talkModeAfter: v.snapshot.talkMode,
@@ -243,7 +238,7 @@ export async function runPersonaHarness(): Promise<{
       if (!out.ok) {
         report.issues.push({
           persona: p.name,
-          mode: 'spacebar-ptt',
+          mode: 'spacebar-toggle',
           turn: i + 1,
           issue: out.issue || clip(out.reply || '', 160),
         });

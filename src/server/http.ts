@@ -544,25 +544,29 @@ get('/api/voice/stt', async () => {
 
 get('/api/voice/tts', async () => {
   const { azureTtsStatus } = await import('../voice/azure-tts.ts');
+  const { xaiTtsStatus } = await import('../voice/xai-tts.ts');
   const { env } = await import('../config/env.ts');
   const azure = azureTtsStatus();
+  const xai = xaiTtsStatus();
   const pref = (env.ttsProvider || 'auto').toLowerCase();
-  const provider =
-    pref === 'azure' && azure.configured
-      ? 'azure'
-      : pref === 'browser'
-        ? 'browser'
-        : azure.configured
-          ? 'azure'
-          : 'browser';
+  let provider: 'azure' | 'xai' | 'browser' = 'browser';
+  if (pref === 'azure' && azure.configured) provider = 'azure';
+  else if ((pref === 'xai' || pref === 'grok') && xai.configured) provider = 'xai';
+  else if (pref === 'browser') provider = 'browser';
+  else if (azure.configured) provider = 'azure';
+  else if (xai.configured) provider = 'xai';
+  else provider = 'browser';
   return {
     provider,
     azure,
+    xai,
     browserDefaultLang: 'en-NG',
     note:
       provider === 'azure'
         ? azure.note
-        : 'Browser speechSynthesis. Prefer en-NG (Ezinne/Abeo) when the OS/browser provides them. Text stays on this machine for browser TTS.',
+        : provider === 'xai'
+          ? xai.note
+          : 'Browser speechSynthesis. Prefer female en-NG (Ezinne) when available. Text stays on this machine for browser TTS.',
   };
 });
 
@@ -581,9 +585,21 @@ post('/api/voice/speak', async (body) => {
   const { spokenLine } = await import('../voice/tts.ts');
   const { pronunciationMap } = await import('../voice/vocab.ts');
   const { azureTtsConfigured, synthesizeAzureSpeech } = await import('../voice/azure-tts.ts');
-  if (!azureTtsConfigured()) {
-    throw new HttpError(400, 'Azure TTS is not configured. Use browser voices, or set AZURE_SPEECH_KEY and AZURE_SPEECH_REGION.');
+  const { xaiTtsConfigured, synthesizeXaiSpeech } = await import('../voice/xai-tts.ts');
+  const { env } = await import('../config/env.ts');
+  const pref = (env.ttsProvider || 'auto').toLowerCase();
+  let engine: 'azure' | 'xai' | null = null;
+  if (pref === 'azure' && azureTtsConfigured()) engine = 'azure';
+  else if ((pref === 'xai' || pref === 'grok') && xaiTtsConfigured()) engine = 'xai';
+  else if (pref === 'auto' && azureTtsConfigured()) engine = 'azure';
+  else if (pref === 'auto' && xaiTtsConfigured()) engine = 'xai';
+  if (!engine) {
+    throw new HttpError(
+      400,
+      'No server TTS. Browser speech will be used, or set XAI_API_KEY / AZURE_SPEECH_KEY.',
+    );
   }
+  const useAzure = engine === 'azure';
   const line = spokenLine(String(body.text ?? ''), {
     hasApproval: Boolean(body.hasApproval),
     pronunciation: pronunciationMap(),
@@ -591,9 +607,12 @@ post('/api/voice/speak', async (body) => {
   if (!line.spoken) throw new HttpError(400, 'Nothing to speak.');
   const voice = body.voice != null ? String(body.voice) : undefined;
   const rate = body.rate != null ? String(body.rate) : undefined;
-  const audio = await synthesizeAzureSpeech({ text: line.spoken, voice, rate });
+  const audio = useAzure
+    ? await synthesizeAzureSpeech({ text: line.spoken, voice, rate })
+    : await synthesizeXaiSpeech({ text: line.spoken, voice });
   return {
     ...line,
+    provider: useAzure ? 'azure' : 'xai',
     voice: audio.voice,
     mimeType: audio.mimeType,
     audioBase64: audio.bytes.toString('base64'),
@@ -629,10 +648,12 @@ post('/api/voice/vocab/delete', async (body) => {
 post('/api/voice/transcribe', async (body) => {
   const { decodeAudioBase64, transcribeAudio, sttStatus } = await import('../voice/stt.ts');
   const status = sttStatus();
-  if (status.provider !== 'groq') {
+  // Server STT: Groq Whisper or xAI Grok Voice Transcribe (same XAI_API_KEY as chat).
+  if (status.provider !== 'groq' && status.provider !== 'xai') {
     throw new HttpError(
       400,
-      status.note + ' Use the browser mic fallback, or set STT_PROVIDER=groq with GROQ_API_KEY.',
+      status.note
+        + ' Use the browser mic fallback, or set STT_PROVIDER=auto with XAI_API_KEY or GROQ_API_KEY.',
     );
   }
   const b64 = String(body.audioBase64 ?? body.audio ?? '');
@@ -835,10 +856,18 @@ post('/api/ask', async (body) => {
 });
 
 get('/api/va/status', async () => {
-  const { listUpcomingEvents, listReminders, listOpenFollowUps, recentVaTurns } = await import('../va/store.ts');
+  const {
+    listUpcomingEvents,
+    listReminders,
+    listOpenFollowUps,
+    listOpenTasks,
+    listDoneTasks,
+    recentVaTurns,
+  } = await import('../va/store.ts');
   const { emailConfigured } = await import('../va/email.ts');
   const { homeTimezone } = await import('../va/timezone.ts');
   const { googleStatus } = await import('../va/google.ts');
+  const { listPendingApprovals } = await import('../guardrails/approvals.ts');
   return {
     homeTimezone: homeTimezone(),
     emailConfigured: emailConfigured(),
@@ -850,8 +879,57 @@ get('/api/va/status', async () => {
     events: listUpcomingEvents(20),
     reminders: listReminders(30),
     followups: listOpenFollowUps(30),
+    tasks: listOpenTasks(40),
+    tasksDone: listDoneTasks(8),
+    approvalsPending: listPendingApprovals(20).length,
     turns: recentVaTurns(15),
   };
+});
+
+/** Ranked today plate: tasks + upcoming meetings + pending approvals count. */
+get('/api/va/today', async () => {
+  const { listUpcomingEvents, listOpenTasks, prioritiseOpenTasks } = await import('../va/store.ts');
+  const { homeTimezone } = await import('../va/timezone.ts');
+  const { listPendingApprovals } = await import('../guardrails/approvals.ts');
+  const tasks = listOpenTasks(40);
+  const events = listUpcomingEvents(12);
+  const approvals = listPendingApprovals(20);
+  return {
+    homeTimezone: homeTimezone(),
+    tasks,
+    events,
+    approvals: approvals.map((a) => ({
+      id: a.id,
+      title: a.title,
+      summary: a.summary,
+      actionType: a.action_type,
+    })),
+    ranked: prioritiseOpenTasks().map((t) => t.id),
+  };
+});
+
+post('/api/va/tasks/complete', async (body) => {
+  const { completeTask } = await import('../va/store.ts');
+  const id = Number(body.id);
+  if (!Number.isFinite(id)) throw new HttpError(400, 'id is required');
+  const task = completeTask(id);
+  if (!task) throw new HttpError(404, 'task not found');
+  return { ok: true, task };
+});
+
+post('/api/va/tasks/snooze', async (body) => {
+  const { snoozeTask } = await import('../va/store.ts');
+  const id = Number(body.id);
+  const until = String(body.until ?? '').trim();
+  if (!Number.isFinite(id) || !until) throw new HttpError(400, 'id and until are required');
+  const task = snoozeTask(id, until);
+  if (!task) throw new HttpError(404, 'task not found');
+  return { ok: true, task };
+});
+
+post('/api/va/tasks/prioritise', async () => {
+  const { prioritiseOpenTasks } = await import('../va/store.ts');
+  return { ok: true, tasks: prioritiseOpenTasks() };
 });
 
 function voiceReply(profile: { cached?: boolean; samples: number; summary: string; themes: string[]; drafts: { body: string }[] }, cached: boolean) {

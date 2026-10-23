@@ -55,9 +55,22 @@ if (existsSync(envFile)) {
 // purpose, then free, then mock.
 const ai = buildAiClient();
 if (ai.kind === 'mock') {
-  warn('AI provider: mock', 'no key set, so every generated post is blocked by the gate.\n        Free key: https://console.groq.com/keys, then `npm run setup`');
+  warn('AI provider: mock', 'no key set, so every generated post is blocked by the gate.\n        Free key: https://console.groq.com/keys, then `npm run setup`\n        Or xAI Grok: set XAI_API_KEY / GROK_API_KEY (and AI_PROVIDER=xai if Groq is also set)');
 } else if (ai.kind === 'anthropic') {
   ok('AI provider: anthropic (paid)', env.aiModel);
+} else if (ai.kind === 'xai') {
+  const { fetchXaiModelIds } = await import('../src/ai/models.ts');
+  const res = await fetchXaiModelIds(env.xaiApiKey);
+  if (!res.ok && res.status === 401) {
+    bad('XAI_API_KEY / GROK_API_KEY rejected', 'create a key at https://console.x.ai (keys usually look like xai-…). Cursor BYOK keys are not the same thing.');
+  } else if (!res.ok) {
+    warn('AI provider: xai (grok)', `${res.error} — model ${env.xaiModel}`);
+  } else if (res.ids.length === 0 || res.ids.includes(env.xaiModel)) {
+    ok('AI provider: xai (grok)', env.xaiModel);
+  } else {
+    bad(`XAI_MODEL ${env.xaiModel} not on this key`,
+      `set XAI_MODEL to one of: ${res.ids.slice(0, 6).join(', ') || '(none listed)'}`);
+  }
 } else {
   const { fetchModelIds, pickChatModel, writableModels } = await import('../src/ai/models.ts');
   const res = await fetchModelIds(env.groqApiKey);
@@ -96,6 +109,40 @@ if (!existsSync(env.dbPath)) {
 }
 
 if (env.paused) warn('PAUSED=1', 'the scheduler will refuse to run anything until this is 0');
+
+if (!env.slackUserToken.trim()) {
+  warn('SLACK_USER_TOKEN blank', 'Slack digest/send stays off — create a Slack app user token (xoxp-) and set SLACK_USER_TOKEN');
+} else if (!/^xoxp-/i.test(env.slackUserToken.trim())) {
+  warn('SLACK_USER_TOKEN shape', 'expected a user token starting with xoxp- (bot tokens are less useful for “act as you”)');
+} else {
+  ok('SLACK_USER_TOKEN', 'set (user token)');
+}
+
+// Optional private SearXNG for Chat research. Unset = memory/KB only (fine).
+if (!env.searxngUrl.trim()) {
+  warn('SEARXNG_URL blank', 'web research stays off — `docker compose -f deploy/searxng/compose.yml up -d` then set SEARXNG_URL=http://127.0.0.1:8080');
+} else {
+  try {
+    const base = env.searxngUrl.replace(/\/$/, '');
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 4000);
+    const res = await fetch(`${base}/search?q=funke&format=json`, {
+      headers: { Accept: 'application/json' },
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    const ctype = res.headers.get('content-type') || '';
+    if (!res.ok) warn(`SearXNG ${base}`, `HTTP ${res.status}`);
+    else if (!/json/i.test(ctype)) {
+      warn(`SearXNG ${base}`, 'returned non-JSON — enable json in deploy/searxng/settings.yml and restart');
+    } else ok('SearXNG', base);
+  } catch (err) {
+    warn(
+      `SearXNG unreachable (${env.searxngUrl})`,
+      `${err instanceof Error ? err.message : String(err)} — start with docker compose -f deploy/searxng/compose.yml up -d`,
+    );
+  }
+}
 
 console.log(problems === 0 ? '\nno blocking problems.\n' : `\n${problems} thing(s) to fix.\n`);
 process.exit(problems === 0 ? 0 : 1);

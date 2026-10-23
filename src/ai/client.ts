@@ -8,7 +8,7 @@ import { env } from '../config/env.ts';
  * end-to-end with no API key and no network.
  */
 export interface AiClient {
-  readonly kind: 'anthropic' | 'groq' | 'mock';
+  readonly kind: 'anthropic' | 'groq' | 'xai' | 'mock';
   /** Free-form text generation. */
   text(opts: { system?: string; prompt: string; maxTokens?: number }): Promise<string>;
   /** Schema-constrained JSON. `schema` is a JSON Schema object. */
@@ -163,6 +163,90 @@ class GroqClient implements AiClient {
 }
 
 /**
+ * xAI Grok, through its OpenAI-compatible chat completions endpoint.
+ *
+ * Paid / BYOK lane. Prefer Groq (free) when both keys exist, unless
+ * AI_PROVIDER=xai is set. Env: XAI_API_KEY or GROK_API_KEY, XAI_MODEL / GROK_MODEL.
+ */
+class XaiClient implements AiClient {
+  readonly kind = 'xai' as const;
+
+  constructor(private apiKey: string, private model: string) {}
+
+  private async call(params: {
+    system?: string;
+    prompt: string;
+    maxTokens: number;
+    schema?: Record<string, unknown>;
+  }): Promise<string> {
+    const system = params.schema
+      ? [
+          params.system,
+          'Reply with JSON only that matches the requested schema. No markdown fences.',
+        ]
+          .filter(Boolean)
+          .join('\n\n')
+      : params.system;
+
+    const res = await fetch('https://api.x.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: this.model,
+        max_tokens: params.maxTokens,
+        temperature: 0.7,
+        ...(params.schema
+          ? { response_format: { type: 'json_object' } }
+          : {}),
+        messages: [
+          ...(system ? [{ role: 'system', content: system }] : []),
+          {
+            role: 'user',
+            content: params.schema
+              ? `${params.prompt}\n\nJSON schema:\n${JSON.stringify(params.schema)}`
+              : params.prompt,
+          },
+        ],
+      }),
+    });
+
+    if (!res.ok) {
+      const detail = (await res.text()).slice(0, 240);
+      if (res.status === 404 && /model/i.test(detail)) {
+        throw new Error(
+          `the model "${this.model}" is not available on xAI. Set XAI_MODEL (e.g. grok-4.7) in .env.`,
+        );
+      }
+      throw new Error(`xai ${res.status}: ${detail}`);
+    }
+    const body = await res.json() as {
+      choices?: { message?: { content?: string } }[];
+    };
+    const text = body.choices?.[0]?.message?.content?.trim();
+    if (!text) throw new Error('xai returned nothing');
+    return text;
+  }
+
+  async text(opts: { system?: string; prompt: string; maxTokens?: number }): Promise<string> {
+    return this.call({ ...opts, maxTokens: opts.maxTokens ?? 2_000 });
+  }
+
+  async json<T>(opts: {
+    system?: string;
+    prompt: string;
+    schema: Record<string, unknown>;
+    maxTokens?: number;
+  }): Promise<T> {
+    const raw = await this.call({ ...opts, maxTokens: opts.maxTokens ?? 2_000 });
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+    return JSON.parse(cleaned) as T;
+  }
+}
+
+/**
  * Deterministic stand-in. Not random: the same input always produces the same
  * output, so smoke runs are reproducible.
  */
@@ -206,15 +290,36 @@ export function mockAiClient(): AiClient {
 
 export function buildAiClient(): AiClient {
   if (cached) return cached;
-  // Free first. Anthropic is only used when AI_PAID=true is set deliberately —
-  // having a key in .env is not a decision to spend it, and the old order meant
-  // every generation quietly billed the founder's own Anthropic account.
-  // Mock only when neither exists, and mock fails the gate by design so nothing
-  // silently publishes stub text.
+
+  const force = env.aiProvider.trim().toLowerCase();
+  if (force === 'mock') {
+    cached = new MockClient();
+    return cached;
+  }
+  if (force === 'anthropic') {
+    if (!env.anthropicApiKey) throw new Error('AI_PROVIDER=anthropic but ANTHROPIC_API_KEY is empty');
+    cached = new AnthropicClient(env.anthropicApiKey);
+    return cached;
+  }
+  if (force === 'groq') {
+    if (!env.groqApiKey) throw new Error('AI_PROVIDER=groq but GROQ_API_KEY is empty');
+    cached = new GroqClient(env.groqApiKey, env.groqModel);
+    return cached;
+  }
+  if (force === 'xai' || force === 'grok') {
+    if (!env.xaiApiKey) throw new Error('AI_PROVIDER=xai but XAI_API_KEY / GROK_API_KEY is empty');
+    cached = new XaiClient(env.xaiApiKey, env.xaiModel);
+    return cached;
+  }
+
+  // Auto: paid Anthropic only on purpose, then free Groq, then xAI Grok, then mock.
+  // Mock fails the gate by design so nothing silently publishes stub text.
   cached = env.aiPaid && env.anthropicApiKey
     ? new AnthropicClient(env.anthropicApiKey)
     : env.groqApiKey
     ? new GroqClient(env.groqApiKey, env.groqModel)
+    : env.xaiApiKey
+    ? new XaiClient(env.xaiApiKey, env.xaiModel)
     : new MockClient();
   return cached;
 }

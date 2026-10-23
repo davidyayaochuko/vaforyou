@@ -46,12 +46,17 @@ export const APPS: AppMeta[] = [
   },
   {
     key: 'tasks',
-    title: 'Tasks',
-    blurb: 'Reminders and follow-ups, soonest first.',
+    title: 'Today',
+    blurb: 'Tasks, meetings, and approvals for the day.',
     icon: 'tasks',
     group: 'Everyday',
     live: true,
-    tryAsks: ['What’s on my plate?', 'Remind me tomorrow at 9am to send the deck', 'Chase Bola on Friday about the invoice'],
+    tryAsks: [
+      'What’s on my plate?',
+      'Prioritise my day',
+      'Remind me tomorrow at 9am to send the deck',
+      'Chase Bola on Friday about the invoice',
+    ],
   },
   {
     key: 'calendar',

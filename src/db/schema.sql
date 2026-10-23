@@ -223,6 +223,25 @@ CREATE TABLE IF NOT EXISTS followups (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Unified plate: reminders and follow-ups dual-write here. New task kinds use this table.
+CREATE TABLE IF NOT EXISTS va_tasks (
+  id           INTEGER PRIMARY KEY,
+  title        TEXT NOT NULL,
+  kind         TEXT NOT NULL DEFAULT 'task',  -- task | reminder | follow_up
+  due_at       TEXT,
+  state        TEXT NOT NULL DEFAULT 'open',  -- open | done | cancelled | snoozed
+  priority     INTEGER NOT NULL DEFAULT 0,    -- higher = sooner in manual rank
+  who          TEXT,
+  source       TEXT NOT NULL DEFAULT 'chat',  -- chat | email | meeting | slack | migrate
+  reminder_id  INTEGER REFERENCES reminders(id) ON DELETE SET NULL,
+  followup_id  INTEGER REFERENCES followups(id) ON DELETE SET NULL,
+  snooze_until TEXT,
+  completed_at TEXT,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_va_tasks_open ON va_tasks (state, due_at);
+
 CREATE TABLE IF NOT EXISTS va_turns (
   id         INTEGER PRIMARY KEY,
   input      TEXT NOT NULL,

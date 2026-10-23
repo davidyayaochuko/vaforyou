@@ -44,12 +44,20 @@ export async function synthesizeAzureSpeech(opts: {
   if (!azureTtsConfigured()) {
     throw new Error('Azure Speech is not configured.');
   }
+  // Default Ezinne (female). Slightly slower + soft pitch lift for a calmer delivery.
   const voice = opts.voice || env.azureTtsVoice || 'en-NG-EzinneNeural';
-  const rate = opts.rate || '1';
+  const rate = opts.rate || '0.95';
+  const chunks = String(opts.text || '')
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const body = (chunks.length ? chunks : [opts.text])
+    .map((s) => `${escapeXml(s)}<break time='220ms'/>`)
+    .join(' ');
   const ssml =
     `<speak version='1.0' xml:lang='en-NG'>` +
     `<voice name='${escapeXml(voice)}'>` +
-    `<prosody rate='${escapeXml(rate)}'>${escapeXml(opts.text)}</prosody>` +
+    `<prosody rate='${escapeXml(rate)}' pitch='+4%'>${body}</prosody>` +
     `</voice></speak>`;
 
   const url =

@@ -79,3 +79,26 @@ export async function fetchModelIds(apiKey: string): Promise<
   const body = await res.json() as { data?: { id: string }[] };
   return { ok: true, ids: (body.data ?? []).map((m) => m.id) };
 }
+
+/** Ask xAI what this key can use. */
+export async function fetchXaiModelIds(apiKey: string): Promise<
+  { ok: true; ids: string[] } | { ok: false; error: string; status?: number }
+> {
+  const res = await fetch('https://api.x.ai/v1/models', {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  }).catch((e: Error) => e);
+
+  if (res instanceof Error) return { ok: false, error: `could not reach xAI: ${res.message}` };
+  if (res.status === 401) return { ok: false, error: 'xAI rejected that key (401)', status: 401 };
+  if (!res.ok) {
+    const detail = (await res.text().catch(() => '')).slice(0, 160);
+    // xAI sometimes returns 400 "Incorrect API key" instead of 401.
+    if (/incorrect api key|invalid.*key|unauthorized/i.test(detail)) {
+      return { ok: false, error: 'xAI rejected that key', status: 401 };
+    }
+    return { ok: false, error: `xAI answered ${res.status}${detail ? `: ${detail}` : ''}`, status: res.status };
+  }
+
+  const body = await res.json() as { data?: { id: string }[] };
+  return { ok: true, ids: (body.data ?? []).map((m) => m.id) };
+}
