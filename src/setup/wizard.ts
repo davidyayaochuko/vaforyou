@@ -6,7 +6,7 @@
  * Starts a throwaway server on 127.0.0.1, opens a browser at it, and walks
  * through three things: paste a free AI key and watch it get verified, click a
  * button to connect LinkedIn, and schedule the first post. Nothing here is
- * reachable from the network, and the page is served from this file — no CDN,
+ * reachable from the network, and the page is served from this file: no CDN,
  * no fonts, no analytics, nothing fetched from anywhere.
  *
  * `npm run setup:cli` is the same flow in the terminal, for a machine with no
@@ -100,7 +100,7 @@ const routes: Record<string, (body: Record<string, unknown>) => Promise<unknown>
 
   /**
    * Verify a key before saving it. `/models` costs nothing and also catches a
-   * retired model id — the failure that otherwise appears hours later inside a
+   * retired model id, the failure that otherwise appears hours later inside a
    * scheduled job and reads as a broken key.
    */
   'POST /api/key': async (body) => {
@@ -222,7 +222,7 @@ export function startWizard(port: number): void {
   // no business being reachable from the network for the two minutes it exists.
   server.listen(port, '127.0.0.1', () => {
     const at = `http://127.0.0.1:${port}`;
-    console.log(`\nsocial-media-automation-agent setup — open ${at}\n`);
+    console.log(`\nFunke setup: open ${at}\n`);
     const opener = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
     spawn(opener, [at], { stdio: 'ignore', detached: true, shell: process.platform === 'win32' }).unref();
     console.log('If no window opened, paste that address into your browser.');

@@ -15,6 +15,7 @@ import TasksPanel from './panels/TasksPanel';
 import CalendarPanel from './panels/CalendarPanel';
 import ApprovalsPanel from './panels/ApprovalsPanel';
 import SocialsPanel from './panels/SocialsPanel';
+import SettingsPanel from './panels/SettingsPanel';
 import ComingSoonPanel from './panels/ComingSoonPanel';
 
 function panelFromUrl(): PanelKey | null {
@@ -53,6 +54,8 @@ function Body({ open, onOpen, onClose }: { open: PanelKey; onOpen: (k: PanelKey)
       return <ApprovalsPanel />;
     case 'socials':
       return <SocialsPanel />;
+    case 'settings':
+      return <SettingsPanel />;
     default:
       return <ComingSoonPanel app={appMeta(open)} />;
   }

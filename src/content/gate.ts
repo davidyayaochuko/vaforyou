@@ -82,7 +82,7 @@ const HASHTAG_RUN = /(^|\s)#\w+(\s+#\w+){2,}/;
 const AI_TELL =
   /(as an ai|i'm an ai|language model|i cannot browse|i don't have access to real-?time)/i;
 
-/** Placeholders that survived generation — the single most embarrassing failure mode. */
+/** Placeholders that survived generation: the single most embarrassing failure mode. */
 const UNFILLED_SLOT = /\{\{[^}]+\}\}|\[(insert|your|company|name|number|x)\b[^\]]*\]|<[A-Z_]{3,}>/i;
 
 /**
@@ -107,16 +107,15 @@ export interface GateInput {
    * because it derives from a shape in templates/. That is the boundary on an
    * AGENT's autonomy, and it stays exactly as strict as it was.
    *
-   * 'founder_approved' is the second, narrower source: an upstream rail wrote it, a
-   * chief reviewed it, HQ's content law checked it in code, HQ's surface gate
-   * ruled on it, and it only reached a queue because the founder's door opened
-   * for that specific deliverable. A template match would add nothing to that
-   * chain — it would just mean no HQ post could ever be published.
+   * 'founder_approved' is the second, narrower source: a post the owner already
+   * reviewed and approved in an upstream system before it was queued here. A
+   * template match would add nothing to that review; it would only mean no
+   * owner-approved post could ever be published.
    *
-   * This is a rule change, not a bypass: it is set by the rail, from the fact
-   * that HQ queued the job, and NEVER by anything that writes copy. An agent
-   * cannot reach it, which is the whole point. Every other rule below still
-   * runs unchanged.
+   * This is a rule change, not a bypass: it is set by the integration that
+   * queues the job, and NEVER by anything that writes copy. An agent cannot
+   * reach it, which is the whole point. Every other rule below still runs
+   * unchanged.
    */
   provenance?: 'template' | 'founder_approved';
 }
@@ -124,7 +123,7 @@ export interface GateInput {
 export interface GateResult {
   pass: boolean;
   violations: string[];
-  /** Normalized body — trailing whitespace trimmed, nothing else altered. */
+  /** Normalized body: trailing whitespace trimmed, nothing else altered. */
   body: string;
 }
 
@@ -214,7 +213,7 @@ export function gate(input: GateInput): GateResult {
     if (rules.maxLines) {
       const lines = body.split('\n').filter((l) => l.trim()).length;
       if (lines > rules.maxLines) {
-        v.push(`Body is ${lines} lines. The cap is ${rules.maxLines} short lines — you have not found the point yet.`);
+        v.push(`Body is ${lines} lines. The cap is ${rules.maxLines} short lines. You have not found the point yet.`);
       }
     }
   }
@@ -279,7 +278,7 @@ export function gateRulesForPrompt(platform: PlatformId, kind: string): string {
   const rules =
     kind === 'dm' ? p.rules.dm : kind === 'comment' ? p.rules.comment : p.rules.post;
   return [
-    'HARD RULES — a draft breaking any of these is rejected by code before it can publish:',
+    'HARD RULES: a draft breaking any of these is rejected by code before it can publish:',
     `- Hard cap ${rules?.maxChars ?? '?'} characters${rules?.maxLines ? `, and at most ${rules.maxLines} non-empty lines` : ''}.`,
     '- No em-dashes. No emoji. At most one hashtag.',
     `- Never these words: ${BANNED_WORDS.slice(0, 12).join(', ')}, and the rest of the banned list.`,

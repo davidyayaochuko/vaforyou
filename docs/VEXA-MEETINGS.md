@@ -32,7 +32,7 @@ Intended Chat / API flow:
 
 ## Hard rules
 
-- No silent recording — explicit opt-in per event.
+- No silent recording, explicit opt-in per event.
 - No notetaker SaaS bill required (Vexa + local/Groq STT).
 - Recap send and calendar writes still go through Approvals.
 

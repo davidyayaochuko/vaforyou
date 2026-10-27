@@ -83,7 +83,7 @@ function isRateLimitedReply(reply: string): boolean {
 
 /** Ask Funke, with a short backoff when the AI provider is rate-limiting. */
 export async function askFunkeDetailed(text: string): Promise<AskResult> {
-  // One quick retry only — long backoff stacks looked like “stuck on Thinking”.
+  // One quick retry only, long backoff stacks looked like “stuck on Thinking”.
   const delays = [0, 2000];
   let last: AskResult = { reply: '', approvals: [] };
   for (let i = 0; i < delays.length; i++) {
@@ -219,6 +219,69 @@ export type Account = {
 
 export async function fetchAccounts(): Promise<Account[]> {
   return api<Account[]>('/api/accounts');
+}
+
+export type EngineStatus = { running?: boolean; paused?: boolean; state?: string };
+
+export async function startEngine(): Promise<EngineStatus> {
+  return api<EngineStatus>('/api/engine/start', 'POST', {});
+}
+
+export async function stopEngine(): Promise<EngineStatus> {
+  return api<EngineStatus>('/api/engine/stop', 'POST', {}, { timeoutMs: 120_000 });
+}
+
+export type GoogleStatus = { configured: boolean; connected: boolean };
+
+export async function fetchGoogleStatus(): Promise<GoogleStatus> {
+  const s = await api<{ google?: GoogleStatus }>('/api/va/status');
+  return s.google ?? { configured: false, connected: false };
+}
+
+/** Returns the Google consent URL. Throws with setup instructions when OAuth is not configured. */
+export async function googleConnectUrl(): Promise<string> {
+  return (await api<{ url: string }>('/api/google/start')).url;
+}
+
+export type VoiceStatus = {
+  stt: { provider: string; model?: string; note?: string };
+  tts: { provider: string; note?: string };
+};
+
+export async function fetchVoiceStatus(): Promise<VoiceStatus> {
+  const [stt, tts] = await Promise.all([
+    api<VoiceStatus['stt']>('/api/voice/stt'),
+    api<VoiceStatus['tts']>('/api/voice/tts'),
+  ]);
+  return { stt, tts };
+}
+
+export type VocabTerm = { id: number; term: string; kind: string; pronunciation: string | null };
+
+export async function fetchVocab(): Promise<VocabTerm[]> {
+  return (await api<{ terms: VocabTerm[] }>('/api/voice/vocab')).terms ?? [];
+}
+
+export async function addVocab(term: string, pronunciation?: string): Promise<VocabTerm> {
+  return api<VocabTerm>('/api/voice/vocab', 'POST', { term, pronunciation: pronunciation || null });
+}
+
+export async function removeVocab(id: number): Promise<{ ok?: boolean }> {
+  return api('/api/voice/vocab/delete', 'POST', { id });
+}
+
+export type MemoryItem = { id: number; scope: string; key: string; value: string; contact: string };
+
+export async function fetchMemory(): Promise<MemoryItem[]> {
+  return api<MemoryItem[]>('/api/memory?limit=100');
+}
+
+export async function forgetMemory(id: number): Promise<{ ok?: boolean }> {
+  return api('/api/memory/forget', 'POST', { id });
+}
+
+export async function forgetAllMemory(): Promise<unknown> {
+  return api('/api/memory/forget-all', 'POST', { confirm: 'FORGET ALL' });
 }
 
 /** Ask the chat panel to open with text ready to send. */

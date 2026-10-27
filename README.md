@@ -1,374 +1,332 @@
 # Funke
 
-**Self-hosted personal assistant.** Chat with Funke in plain English for calendar,
-reminders, and social drafts. Approve the exact final text before anything posts.
-Runs on your machine. No SaaS.
+**A self-hosted personal assistant you can chat with or talk to.** Funke keeps your
+calendar, reminders, tasks and follow-ups, drafts posts for LinkedIn, X and Bluesky,
+and asks you to approve the exact final text before anything leaves your machine.
 
-This repo also includes the older **social-media-automation-agent** engine (LinkedIn,
-X, Bluesky via a browser you log into). Funke's chat is the main interface; the
-social engine stays **off** until you start it on purpose.
+- Runs entirely on your computer. No SaaS, no account to create, nothing phones home.
+- Works on a **free** Groq API key. Paid models are strictly opt-in.
+- Voice is optional, and voice can never approve anything. Approvals are always a tap on screen.
+- The social engine is **off** until you press Start, and it never starts on its own.
 
-| You need | Notes |
-|---|---|
-| **Node.js 22.5+** | Check with `node -v` |
-| **A free Groq API key** | [console.groq.com/keys](https://console.groq.com/keys) (no card) |
-| **npm** | Comes with Node |
-
-Docker is **not** required (and not shipped yet). You do **not** need LinkedIn, X,
-or Google on day one for chat and reminders.
-
-### First success (about 10 minutes)
-
-```bash
-git clone <this-repo>
-cd vaforyou   # or the folder name you cloned
-npm install
-npm run setup
-# Paste your Groq key when the setup page asks.
-# You can skip LinkedIn login for now.
-npm run start
-```
-
-Open **http://127.0.0.1:4310** in your browser (this computer only).
-
-1. Ask: `What's on my plate?`
-2. Ask: `Remind me tomorrow at 9am to call Ada`
-3. Ask: `Draft a LinkedIn post about …` then tap **Approve** on the card (voice cannot approve)
-
-Nothing posts until you approve **and** you start the social engine. Leave the
-engine off while you learn.
-
-Data locations, Groq/Google/mic transcription, and retention: [`docs/DATA.md`](docs/DATA.md).
-Safety model: [`docs/AGENT-CONTROL.md`](docs/AGENT-CONTROL.md).
-
-### Voice
-
-- **Say**: reads Funke’s reply. Prefers Nigerian English browser voices (`en-NG`, e.g. Edge Abeo/Ezinne) when installed. Optional Azure neural voices via `AZURE_SPEECH_*` in `.env`.
-- **Talk**: conversation mode (hands-free). Listens, auto-sends after a pause, speaks the reply, then listens again. Voice still cannot approve; tap Approve on screen.
-- **Soc → Voice**: pick engine, voice, speed, preview, and edit vocabulary (names/places for STT + pronunciation).
-- Privacy and costs: [`docs/DATA.md`](docs/DATA.md) (Voice section).
-
-### Windows
-
-Use **PowerShell** or **Windows Terminal**. Commands below work the same if Node
-and npm are on your PATH. If `npm` is missing, install Node from
-[nodejs.org](https://nodejs.org/). WSL is optional, not required for Funke chat.
+Funke is built on [social-media-automation-agent](https://github.com/zackfounder/social-media-automation-agent)
+by [Zack Guerrand](https://www.linkedin.com/in/zackguerrand/), and is released under the
+same [MIT license](LICENSE).
 
 ---
 
-## Social engine (optional, later)
+## Quick start (about 10 minutes)
 
-**Self-hosted social media automation** for **LinkedIn** (profile and company page,
-posts, comments, reactions, reposts, DMs, invitations, replies) plus **X** and
-**Bluesky**, from your own logged-in browser.
-
-No platform API keys, no approved developer app, no monthly SaaS. One free LLM key
-(Groq) and a browser you log into yourself. Built on Linked Helper's architecture:
-one real browser per account, rolling rate limits, human pacing. Agents stay bounded
-by an approved template bank and a content gate with no bypass.
-
-Two docs before you connect real accounts:
-
-- [`docs/AGENT-CONTROL.md`](docs/AGENT-CONTROL.md) - what agents can and cannot do. **Read this.**
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) - the Linked Helper teardown.
-
-> Automating these platforms violates their terms of service. The realistic downside
-> is a restricted or banned account. The defaults here are a warm-up profile because
-> that is what keeps accounts alive: one post a day, a handful of comments, gaps of
-> 35-140 seconds between actions. Raise them slowly, over weeks, or not at all.
-
----
-
-## What the social engine does
-
-**LinkedIn — the full surface:**
+### 1. What you need
 
 | | |
 |---|---|
-| **Post** | to your profile, or as a company page you administer |
-| **Comment** | on any post you name, or on what the feed serves up |
-| **React** | like, celebrate, support, love, insightful, funny |
-| **Repost** | plain, or with your own line on top |
-| **Reply** | to the comments on your own posts — the thing everyone drops |
-| **DM** | 1st-degree connections |
-| **Invitations** | accept the ones worth accepting, withdraw stale ones you sent |
-| **Follow** | people and company pages |
-| **Profile visits** | they get notified you looked. Linked Helper's warm-up step |
-| **Delete** | remove a post you published, confirmed gone before it reports success |
-| **Outreach funnel** | invite → filter_connected → message → check_replies |
+| **Node.js 22.5 or newer** | Check with `node -v`. Get it from [nodejs.org](https://nodejs.org/). |
+| **Git** | To clone the repo. |
+| **A free Groq API key** | [console.groq.com/keys](https://console.groq.com/keys). No card, takes a minute. |
 
-**X:** posts and threads, DMs, feed reading, likes.
+You do **not** need LinkedIn, X, Google or Docker to start. Chat, reminders and
+drafts work with just the Groq key.
 
-**Bluesky:** posts and threads, feed reading, likes, replies, follows, delete. The
-most reliable of the three to automate — the client is open source and ships
-`data-testid` on everything, because its own end-to-end tests depend on them.
-
-Everything a model writes — post, comment, reply, DM, repost commentary — passes the
-content gate before it can reach an account, and again immediately before publishing.
-
-## Setup — about five minutes (social engine optional)
-
-You need **Node 22.5+** and one **free** Groq key. That is the whole shopping list
-for Funke chat. LinkedIn login is **optional** until you want the social engine.
-
-| | | |
-|---|---|---|
-| 1 | Get a free key at [console.groq.com/keys](https://console.groq.com/keys) | ~1 min, no card |
-| 2 | `npm install` | ~2 min, downloads Chromium |
-| 3 | `npm run setup`, paste the key when asked | ~30 sec |
-| 4 | (Optional) Log into LinkedIn in the window it opens | ~1 min |
+### 2. Install
 
 ```bash
-git clone https://github.com/zackfounder/social-media-automation-agent.git
-cd social-media-automation-agent
+git clone https://github.com/davidyayaochuko/vaforyou.git
+cd vaforyou
 npm install
+```
+
+`npm install` installs the server, the UI (in `web/`), and a copy of Chromium that
+Playwright uses for the social accounts. Expect a couple of minutes.
+
+### 3. Set up
+
+```bash
 npm run setup
 ```
 
-`npm run setup` opens **a page in your browser**, not a wall of prompts. Paste the
-key and watch it get verified against Groq, click one button to open the LinkedIn
-login window, and schedule your first post — with a live checklist going green as
-each piece lands.
+This opens a short setup page in your browser. Paste your Groq key, and it is checked
+live. Skip the LinkedIn step for now if you like. Setup:
 
-It writes `.env` (mode `600`), generates the control-API token, creates the
-database, and copies the example brief and template bank into files that are yours
-to edit. Safe to re-run; nothing already set is overwritten. The page is served from
-127.0.0.1 for the two minutes it exists, with no CDN, no fonts and no analytics.
+- writes `.env` (readable only by you) and generates an `API_TOKEN`,
+- creates the local SQLite database in `data/`,
+- copies the example instructions and template bank into files that are yours to edit.
 
-No browser on that machine? `npm run setup:cli` is the same flow in the terminal.
+It is safe to re-run. Nothing you already set is overwritten. No browser on that
+machine? Use `npm run setup:cli` for the same flow in the terminal.
 
-<details>
-<summary>Why a free key is the default, and how to use a paid one</summary>
-
-These are two-hundred-word posts written against a template that already dictates
-their shape, so a frontier model buys nothing. Groq's free tier runs the whole
-engine. Anthropic is available but strictly opt-in: it is used **only** when
-`ANTHROPIC_API_KEY` *and* `AI_PAID=true` are both set — a key sitting in `.env` is
-not consent to spend it. With no key at all you get a deterministic mock: every
-step works, but generated posts are always blocked by the gate, on purpose, so stub
-text can never reach a real account.
-
-</details>
-
-Then connect each account. **You log in yourself** — a real browser window opens and
-waits. Nothing types a password, reads a credential, or touches 2FA.
+### 4. Build and run
 
 ```bash
-npm run login -- linkedin   --platform linkedin
-npm run login -- twitter    --platform x
+npm run build    # builds the UI. Run again after every git pull.
+npm run start
+```
+
+Open **[http://localhost:4310](http://localhost:4310)**. That is the whole app: one
+process, one address, reachable only from this computer.
+
+### 5. Try it
+
+Open **Chat** from the dock (or press `Cmd/Ctrl + K`) and ask:
+
+1. `What's on my plate?`
+2. `Remind me tomorrow at 9am to call Ada`
+3. `Book a call with Chioma Thursday at 3pm`
+4. `Draft a LinkedIn post about our launch`, then tap **Approve** on the card
+
+Nothing posts until you approve it **and** start the social engine in **Settings**.
+Leave the engine off while you learn.
+
+---
+
+## Using Funke
+
+The home screen is a desktop with a dock. Everything lives in panels:
+
+| Panel | What it does |
+|---|---|
+| **Chat** | Ask in plain English. Cards appear for anything that needs your approval. |
+| **Today** | Tasks, reminders and meetings for the day, with one-tap Done and Prioritise. |
+| **Calendar** | Upcoming meetings in your home timezone. |
+| **Approvals** | Everything waiting on you. Approve or reject the exact final text. |
+| **Socials** | Connected LinkedIn, X and Bluesky accounts and their status. |
+| **Settings** | Start or stop the social engine, connect Google Calendar, see voice providers, teach Funke names and how to say them, and review or forget what Funke remembers. |
+
+The orb in the middle is voice. Tap it (or press Space) to talk. Funke listens,
+replies out loud, and listens again. It will read you an approval card, but it will
+not approve one.
+
+---
+
+## Optional extras
+
+Everything below is configured in `.env`. Restart `npm run start` after changing it.
+[`.env.example`](.env.example) documents every variable.
+
+### Better voice
+
+By default Funke uses your browser's speech engine. For better quality:
+
+- **Transcription:** your `GROQ_API_KEY` already enables Groq Whisper (`STT_PROVIDER=auto`).
+- **Speaking:** set `XAI_API_KEY` for xAI voices, or `AZURE_SPEECH_KEY` and
+  `AZURE_SPEECH_REGION` for Azure neural voices (Nigerian English by default).
+
+Audio is sent for the request and discarded. Details in [`docs/DATA.md`](docs/DATA.md).
+
+### Google Calendar
+
+1. In [Google Cloud Console](https://console.cloud.google.com/), create a project and
+   enable the **Google Calendar API**.
+2. Create an **OAuth client ID** (type *Web application*) with this redirect URI:
+   `http://127.0.0.1:4310/api/google/callback`
+3. Put the client ID and secret in `.env` as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
+4. Restart, open **Settings**, and press **Connect** next to Google Calendar.
+
+### Reminder emails
+
+Set `NOTIFY_EMAIL` and the `SMTP_*` variables. For Gmail use `smtp.gmail.com`, port
+`587`, and an [App Password](https://myaccount.google.com/apppasswords), not your
+normal password.
+
+### Social accounts
+
+You log in yourself. A real browser window opens and waits; nothing in this repo
+ever types a password or touches 2FA.
+
+```bash
+npm run login -- linkedin  --platform linkedin
+npm run login -- twitter   --platform x
 npm run login -- main-bsky --platform bluesky
 ```
 
-One account = one browser profile = one platform. The session lives in
-`data/profiles/<name>/` on this machine. Treat that directory as a credential.
+Each account gets its own browser profile in `data/profiles/<name>/`. **Treat that
+folder like a password**: anyone who has it is logged in as you. Then see
+[The social engine](#the-social-engine) below.
 
-### What is secret, and what protects it
+### More integrations
 
-Nothing here phones home. Everything — the database, the sessions, the keys — is a
-file on your machine.
+Google Workspace through an MCP server, Slack, private web research through SearXNG,
+supervised browser tasks and meeting notes are all optional and off by default. Each
+one has a commented block in [`.env.example`](.env.example). Write actions from
+every integration still wait in Approvals.
 
-| | Where | Protected by |
+---
+
+## Security model
+
+| What | Where | Protected by |
 |---|---|---|
-| AI key + control token | `.env` | git-ignored, and `setup` sets it to mode `600` |
-| Logged-in sessions | `data/profiles/<name>/` | git-ignored. **This is the real crown jewel** — anyone with the directory is logged in as you |
-| Dashboard + control API | `localhost:4310` | bound to `127.0.0.1`, so nothing on your network can reach it |
+| AI keys and `API_TOKEN` | `.env` | git-ignored, mode `600` |
+| Logged-in sessions | `data/profiles/` | git-ignored. The most sensitive thing on disk. |
+| Database (chat, memory, audit log) | `data/` | git-ignored |
+| The app and its API | `localhost:4310` | bound to `127.0.0.1` only |
 
-The dashboard hands the API token to whoever loads the page, and that token can
-publish to your real account — which is exactly why the socket is loopback-only. If
-you set `BIND_HOST` to anything reachable, the server **refuses to start** without an
-`API_TOKEN`, and the dashboard route starts demanding it too. `npm run doctor` checks
-all of this and tells you what is wrong.
+The UI authenticates with an HttpOnly, SameSite=Strict session cookie, so the API
+token is never visible to page scripts. Scripts and agents call the API with
+`Authorization: Bearer $API_TOKEN`.
 
-The one thing to keep in mind: `data/` is not in git, so it is also not in any
-backup that only covers your repo.
+If you set `BIND_HOST` to anything other than loopback, the server **refuses to
+start** unless you also set `BIND_ALLOW_NON_LOOPBACK=true` and an `API_TOKEN` of at
+least 24 characters. The first visit from another machine must then be
+`/?token=<API_TOKEN>`. Run `npm run doctor` any time to check all of this.
+
+`data/` is not in git, so it is also not in any backup that only covers the repo.
+
+---
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| "The Funke UI is not built yet" | Run `npm run build`, then reload. |
+| Panels say the server is not answering | Make sure `npm run start` is still running. |
+| Replies are blocked or look like stubs | No AI key is set, so the mock is running. Check `npm run doctor`. |
+| Groq says the model is gone | Re-run `npm run setup`. It picks a live model. |
+| Mic does nothing | Allow microphone access for `localhost` in your browser. |
+| Anything else | `npm run doctor` is read-only and tells you what is wrong. |
+
+On Windows, use PowerShell or Windows Terminal. The commands are the same.
+
+---
+
+## Developing
 
 ```bash
-npm run doctor                # is anything wrong? read-only, opens no browser
-npm run accounts              # what's connected, what it can do, today's budget
-npm run start                 # dashboard at http://localhost:4310
+npm run dev      # API server with reload on :4310
+npm run ui       # UI dev server with hot reload on :4330 (proxies /api to :4310)
 ```
 
-The engine does not auto-start. You press the button.
+Open [http://127.0.0.1:4330](http://127.0.0.1:4330) while developing. The dev proxy
+adds your `API_TOKEN` from `.env`, so you do not need to log in.
 
-### Posting as a LinkedIn company page
+| Check | Command |
+|---|---|
+| Types (server) | `npm run typecheck` |
+| Types (UI) | `npm run ui:check` |
+| Engine checks, no network or credentials | `npm run smoke` |
+| Approvals and guardrails | `npm run guardrails` |
+| Browser layer against fixture pages | `npm run selftest` |
 
-A page post needs the page's own composer URL, passed when the job is created. There
-is deliberately **no fallback** to the personal profile: if the page composer cannot
-be opened, the post fails rather than landing on your own feed under your own name.
+Read [`docs/HANDOFF.md`](docs/HANDOFF.md) before changing the engine. It explains the
+two queues, the tick loop and the content gate. [`CLAUDE.md`](CLAUDE.md) has the
+invariants that the tests enforce.
 
-## Writing one post, by hand
+```
+src/
+  server/      HTTP API, and serves the built UI from web/dist
+  va/          the assistant: chat commands, calendar, reminders, memory, Google
+  voice/       transcription, speech, vocabulary
+  guardrails/  approvals, audit log, hard boundaries
+  platforms/   one adapter per social platform. Every selector lives here.
+  content/     templates, generation, and the content gate
+  engine/      rate limits, scheduler, jobs
+  browser/     one persistent Chromium per account, human pacing
+  mcp/         MCP server for coding agents
+  db/          schema and plain-function repositories
+web/           the Astro + React UI
+instructions/  the assistant's and agents' brief (examples ship, yours are git-ignored)
+templates/     approved post shapes per platform
+knowledge/     your local knowledge base (examples ship)
+docs/          architecture, data handling, agent control
+```
 
-Before you hand a scheduler your real account, watch it write something.
+---
+
+## The social engine
+
+Optional. It publishes and engages on **LinkedIn** (profile or company page: posts,
+comments, reactions, reposts, replies, DMs, invitations), **X** (posts, threads, DMs,
+likes) and **Bluesky** (posts, threads, replies, likes, follows), from browsers you
+are logged into. No platform API keys.
+
+> Automating these platforms is against their terms of service. The realistic
+> downside is a restricted or banned account. The defaults are a warm-up profile
+> (one post a day, a handful of comments, 35-140 seconds between actions). Raise
+> them slowly, over weeks, or not at all.
+
+Read [`docs/AGENT-CONTROL.md`](docs/AGENT-CONTROL.md) before connecting real accounts.
+
+Every piece of text a model writes passes the content gate before it is queued, and
+again immediately before publishing. There is no bypass. Posts must match an approved
+shape in `templates/<platform>/bank.json`.
+
+### Write and publish one post by hand
 
 ```bash
 npm run draft -- linkedin "the number that surprised me this week" \
   --facts "churn 4.1%, was 6.8% in May. one onboarding change."
+npm run queue                          # what is waiting, with ids
+npm run queue -- edit 3 "new text"     # replace it. This re-runs the gate.
+npm run publish -- 3                   # opens the browser and publishes it
 ```
 
-It writes, gates, and prints the post with its violations if it failed. Then:
+### Schedule the agents
 
 ```bash
-npm run queue                          # everything waiting, with ids
-npm run queue -- show 3                # the full body, and why it is blocked
-npm run queue -- edit 3 "new text"     # replace it — this re-runs the gate
-npm run queue -- discard 3
-npm run publish -- 3                   # opens the browser and publishes this one
-```
-
-`npm run publish -- linkedin --text "..."` publishes something you wrote yourself.
-It still goes through the gate, the rate limiter and the audit log — there is no
-path around them, including this one.
-
-## Scheduling the agents
-
-```bash
-# write a LinkedIn post every day, publish whatever is queued every 2 hours
+# write a LinkedIn post every day, publish whatever is approved every 2 hours
 npm run schedule -- add linkedin generate_post --every 1d \
-  --brief "This week's real number or decision. Nothing invented." \
-  --facts "MRR 180. 12 trials. Shipped the Telegram loop Tuesday."
+  --brief "This week's real number or decision. Nothing invented."
 npm run schedule -- add linkedin publish_due --every 2h
 
-# answer the comments on your own posts, twice a day, at most 3 replies
+# answer comments on your own posts twice a day, at most 3 replies
 npm run schedule -- add linkedin reply_comments --every 12h --max 3
-
-# accept the invitations worth accepting, and withdraw ones nobody answered
-npm run schedule -- add linkedin grow_network --every 1d \
-  --criteria "founders, engineers and people who actually build things" \
-  --accept-max 10 --withdraw-after 21
-
-# engage with the X timeline three times a day, at most 3 actions each
-npm run schedule -- add twitter engage_feed --every 8h --max 3 \
-  --criteria "builders posting real numbers or real technical detail"
-
-# one specific post: react, comment, and share it
-npm run schedule -- add linkedin engage_post --at now \
-  --url "https://www.linkedin.com/feed/update/urn:li:activity:123" \
-  --reaction insightful \
-  --brief "agree with the retention point, add what we measured"
 
 npm run schedule -- list
 npm run schedule -- pause 3
 ```
 
-**Job kinds:** `generate_post`, `publish_due`, `engage_feed`, `send_dm`,
-`engage_post`, `reply_comments`, `grow_network`, `visit_profiles`, `follow_targets`.
+Job kinds: `generate_post`, `publish_due`, `engage_feed`, `send_dm`, `engage_post`,
+`reply_comments`, `grow_network`, `visit_profiles`, `follow_targets`. Recurrence is
+`90m`, `6h` or `1d` with up to 20% jitter. Everything obeys working hours and rate
+caps. Then press **Start engine** in Settings.
 
-Recurrence is `90m` / `6h` / `1d`, re-armed with up to 20% jitter. Everything still
-obeys working hours and rate caps.
+### Change what it is allowed to say
+
+| To change | Edit | Takes effect |
+|---|---|---|
+| Voice, rules, engagement bar | `instructions/GLOBAL.md`, `instructions/<platform>.md` | Next generation |
+| Approved post shapes | `templates/<platform>/bank.json` | Next generation |
+| Hard-enforced rules | `src/content/gate.ts` | Restart |
+| Rate caps, working hours | `POST /api/limits` or the `set_limits` MCP tool | Immediately |
+
+### Connect a coding agent (MCP)
+
+```bash
+claude mcp add funke -- npx tsx /path/to/vaforyou/src/mcp/server.ts
+```
+
+Agents can draft, queue, schedule and control jobs. They cannot invent a template,
+publish text that fails the gate, exceed or raise a cap, or act outside working
+hours. Those limits live in the engine, not in the tool descriptions.
+
+### What is verified
+
+`npm run smoke` and `npm run selftest` cover the engine and drive the real adapters
+in a real browser against local fixture pages. **No platform selector has been
+verified against a live session.** Each platform needs one supervised run: log in,
+schedule one job, watch the browser, and fix whatever the log says it could not find.
+Selectors for each platform live in a single file in `src/platforms/`.
+
+---
 
 ## Commands
 
 | Command | Does |
 |---|---|
-| `npm run setup` | The visual wizard: key, login, first post. Re-runnable. |
+| `npm run setup` | Setup page: key, database, first account. Re-runnable. |
 | `npm run setup:cli` | The same, in the terminal |
-| `npm run doctor` | Read-only health check: node, keys, model, bind address, `.env` permissions, accounts |
-| `npm run selftest` | 66 checks driving the real adapters through a real browser against fake LinkedIn and Bluesky. No account, no network |
-| `npm run draft -- <account> "..."` | Write one post, gate it, print it. Publishes nothing |
-| `npm run queue` | What is waiting. `-- show/edit/discard <id>` |
-| `npm run publish -- <id>` | Publish one item now, through the same gate and caps |
-| `npm run smoke` | 74 checks: URL handling, workflow traps, queue machine, rate limiter, **the gate**, template rotation, thread splitting, job queue. No credentials, no network. |
-| `npm run db:init` | Create the database |
-| `npm run login -- <name> --platform <p>` | Connect one account (interactive). `--proxy socks5://…` to pin an IP. |
-| `npm run accounts` | Read-only status of every account. `-- forget <name>` removes one |
-| `npm run schedule -- …` | `list` / `add` / `pause` / `resume` / `rm` jobs |
-| `npm run campaign -- <file.json>` | Load a LinkedIn outreach funnel |
-| `npm run leads -- csv <f> --campaign 1` | Import leads |
-| `npm run start` | Dashboard + control API |
-| `npm run mcp` | MCP server on stdio, for Claude Code |
+| `npm run build` | Build the UI |
+| `npm run start` | Run Funke at http://localhost:4310 |
+| `npm run doctor` | Read-only health check |
+| `npm run login -- <name> --platform <p>` | Connect one social account |
+| `npm run login:all` | Log in every account without a live session |
+| `npm run accounts` | What is connected and today's budget. `-- forget <name>` removes one. |
+| `npm run draft` / `queue` / `publish` | Write, review and publish posts by hand |
+| `npm run schedule -- ...` | `list`, `add`, `pause`, `resume`, `rm` jobs |
+| `npm run campaign -- <file.json>` | Load a LinkedIn outreach funnel (needs `OUTREACH_ENABLED=true`) |
+| `npm run leads -- csv <file> --campaign 1` | Import leads |
+| `npm run mcp` | MCP server on stdio |
 
-## Connecting your agents
+## License
 
-```bash
-claude mcp add social -- npx tsx /path/to/social-media-automation-agent/src/mcp/server.ts
-```
-
-**Content and engagement:** `list_platforms`, `list_templates`, `read_instructions`,
-`check_content`, `draft_content`, `queue_content`, `list_content`, `schedule_job`,
-`list_jobs`, `control_job`, `feed_activity`.
-
-**Outreach funnel:** `list_actions`, `validate_workflow`, `load_workflow`,
-`list_campaigns`, `set_campaign_status`, `add_leads`, `harvest_search`.
-
-**Control:** `engine_control`, `get_limits`, `set_limits`, `get_activity`,
-`suppress_lead`.
-
-The agents can draft, queue, publish, DM and engage with no human step. They
-**cannot** invent a template, publish text that fails the gate, exceed a cap, raise
-their own caps, act outside working hours, or bypass the pre-publish re-check. Those
-live in the engine, not in the tool descriptions.
-
-Everything is also plain HTTP with `Authorization: Bearer $API_TOKEN`.
-
-## Changing what it's allowed to say
-
-Setup copies `instructions/*.example.md` and `templates/*/bank.example.json` into
-files of your own. **Yours are git-ignored** — pulling will never overwrite your
-voice, and your voice is never in a commit.
-
-| To change | Edit | Effect |
-|---|---|---|
-| Voice, rules, engagement bar | `instructions/GLOBAL.md`, `instructions/<platform>.md` | Next generation |
-| The approved shapes | `templates/<platform>/bank.json` | Next generation |
-| The hard-enforced rules | `src/content/gate.ts` | Restart |
-| Rate caps, working hours | Dashboard, `POST /api/limits`, or `set_limits` | Immediate |
-
-No redeploy for the first two. That is the point — the template bank is the control
-surface, not the code.
-
-## Layout
-
-```
-instructions/         GLOBAL.md + one file per platform — the agents' brief
-templates/            5 approved shapes per platform — the hard whitelist
-src/
-  platforms/          one adapter per platform: selectors, post, dm, feed, engage
-  content/            templates (rotation), gate (code-enforced rules), generate (gen→gate→repair)
-  engine/             limits, jobs (post/engage/dm), runner (funnel step), scheduler, workflow
-  browser/            persistent Chromium session, human pacing, LinkedIn Voyager reads
-  actions/            outreach funnel actions
-  sources/            lead collection
-  ai/                 AiClient interface + Groq (free), Claude (opt-in), and mock
-  server/             HTTP API + dashboard
-  mcp/                MCP server
-  db/                 schema.sql + typed repositories
-docs/                 AGENT-CONTROL.md, ARCHITECTURE.md
-```
-
-## What is verified and what is not
-
-### `npm run selftest` — the browser layer, proven
-
-A real headless Chromium, the real adapter, and every linkedin.com request answered
-from local fixtures. It drives posting, the six reactions through the hover flyout,
-comments, replies, both repost paths, follows, profile visits, the invitation
-manager and deletion — asserting the outcome the page recorded, never just that a
-call returned ok.
-
-It found four real bugs the first time it ran, including one that reported ten
-successful invitation withdrawals while the list sat untouched.
-
-**What it cannot prove:** that the fixtures match what LinkedIn serves today. They
-are a reconstruction. Passing is what makes one supervised live run worth doing —
-it is not a substitute for it.
-
-**Verified** (`npm run smoke` — 74 checks, no credentials): URL normalization; the three
-workflow-validation traps; the funnel queue end-to-end; the rolling rate limiter
-including that failed attempts don't consume quota; **13 separate content-gate
-checks** including template binding, banned words, placeholders, outreach mechanics
-and near-duplicates; template rotation fairness over 6 picks; X thread splitting and
-per-tweet caps; instructions loading for both platforms; every scheduleable job kind
-being handled; invitation-age parsing; platform caps outranking the seeded defaults;
-generation failing
-closed; the job queue and recurrence parsing. Typecheck is clean and the MCP server
-enumerates its tools.
-
-**Not verified against the real site: every platform selector.** `src/platforms/*.ts`
-has never run against a live logged-in session — only against the fixtures above.
-They are written defensively —
-`data-testid` on X, `aria-label` and roles elsewhere, several candidates per target,
-never obfuscated class names — but each platform needs one supervised calibration
-run: log in, schedule one job, watch the browser, and fix whatever the engine log
-says it could not find. Every selector for a platform lives in that platform's
-single file, and the newer LinkedIn actions (reactions flyout, invitation manager,
-comment replies) have had the least exposure of all.
+[MIT](LICENSE). Contributions are welcome: open an issue or a pull request.

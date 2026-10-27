@@ -22,7 +22,7 @@ cannot slip through either.
 
 ---
 
-## 1. `instructions/` — the brief
+## 1. `instructions/`, the brief
 
 Plain markdown, read fresh on every generation. Edit and the next post uses the new
 version; no restart, no redeploy.
@@ -36,10 +36,10 @@ version; no restart, no redeploy.
 
 `GLOBAL.md` loads first, the platform file loads on top and wins on conflicts.
 
-**This layer is advisory.** A model can be talked out of an instruction — that is
+**This layer is advisory.** A model can be talked out of an instruction, that is
 precisely why the next two layers exist.
 
-## 2. `templates/` — the approved shapes
+## 2. `templates/`, the approved shapes
 
 Five per platform, in `templates/<platform>/bank.json`. Each one is:
 
@@ -65,7 +65,7 @@ accounts."
 To change what your accounts are allowed to say, edit these files. To add a sixth
 shape, add a sixth object. No code change.
 
-## 3. `src/content/gate.ts` — the part that cannot be argued with
+## 3. `src/content/gate.ts`, the part that cannot be argued with
 
 Ported from an earlier `checkContent`, and it exists for the reason recorded there:
 prompting alone did not hold. A test post correctly declared its own account type
@@ -84,7 +84,7 @@ There is deliberately **no bypass parameter**. Not a flag, not an override, not 
 | Engagement bait | "thoughts?", "let me know in the comments", "who else" |
 | Raw KPI column names | `mrr_usd`, `total_users` etc. in prose |
 | AI tells | "as an AI", "language model" |
-| **Outreach mechanics** | DM scripts, lead lists, prospect CRMs, automation tooling — the audience overlaps with the targets |
+| **Outreach mechanics** | DM scripts, lead lists, prospect CRMs, automation tooling, the audience overlaps with the targets |
 | Platform shape | Char caps, line caps, links-allowed, per-tweet caps inside a thread |
 | Template constraints | `requiresNumber`, `requiresTitle`, `minChars`, `isThread` |
 | Repetition | >70% word overlap with anything this account already published |
@@ -133,7 +133,7 @@ Adapter defaults, overridable in settings (settings always win):
 | | post/day | dm/day | like/day | comment/day |
 |---|---|---|---|---|
 | LinkedIn | 1 | 20 | 30 | 8 |
-| X | 4 | 12 | 40 | — |
+| X | 4 | 12 | 40 | - |
 
 LinkedIn's targeted actions, which act on a URL you named:
 
@@ -152,8 +152,8 @@ Windows are **rolling** 24h and 1h, not calendar days.
 
 Nothing is ephemeral. `content` holds every draft including the blocked ones and why
 they were blocked. `feed_seen` holds every post considered, the action taken, and the
-one-sentence reason — including deliberate skips. `action_log` holds every attempt,
+one-sentence reason, including deliberate skips. `action_log` holds every attempt,
 successful or not, and is what the rate limiter counts.
 
-`npm run accounts` and the dashboard read all of it. So does the `list_content`,
+`npm run accounts` and the UI read all of it. So does the `list_content`,
 `feed_activity` and `get_activity` MCP tools.

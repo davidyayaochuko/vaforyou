@@ -1,5 +1,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { extname, join as joinPath, resolve as resolvePath, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { env } from '../config/env.ts';
 import { engine } from '../engine/scheduler.ts';
 import { loadWorkflow, validateWorkflow, WorkflowSchema } from '../engine/workflow.ts';
@@ -33,7 +36,6 @@ import { importCsv } from '../sources/csv.ts';
 import { harvestSearch } from '../sources/search.ts';
 import { openSession } from '../browser/session.ts';
 import { normalizeProfileUrl, publicIdOf } from '../util/url.ts';
-import { dashboardHtml } from './dashboard.ts';
 import { describePlatforms, isPlatformId } from '../platforms/index.ts';
 import { loadTemplates } from '../content/templates.ts';
 import { gate } from '../content/gate.ts';
@@ -1035,18 +1037,97 @@ class HttpError extends Error {
  *
  * `===` on strings returns as soon as two bytes differ, which leaks the token a
  * character at a time to anyone who can measure the difference. timingSafeEqual
- * needs equal lengths, so length is compared first and separately — that much is
- * public anyway.
+ * needs equal lengths, so length is compared first and separately (that much is
+ * public anyway).
  */
 function authorized(req: IncomingMessage): boolean {
   // No token set is only survivable because the server is bound to loopback;
   // startServer() refuses to start otherwise.
   if (!env.apiToken) return true;
-  const header = req.headers.authorization ?? '';
-  const expected = `Bearer ${env.apiToken}`;
-  if (header.length !== expected.length) return false;
-  return timingSafeEqual(Buffer.from(header), Buffer.from(expected));
+  return (
+    safeEqual(req.headers.authorization ?? '', `Bearer ${env.apiToken}`) ||
+    safeEqual(readCookie(req, SESSION_COOKIE), env.apiToken)
+  );
 }
+
+function safeEqual(got: string, expected: string): boolean {
+  if (got.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(got), Buffer.from(expected));
+}
+
+/**
+ * The UI authenticates with an HttpOnly cookie instead of a token baked into
+ * the page, so page scripts (and anything injected into them) never see it.
+ * SameSite=Strict keeps other sites from riding it.
+ */
+const SESSION_COOKIE = 'funke_session';
+
+function readCookie(req: IncomingMessage, name: string): string {
+  for (const part of (req.headers.cookie ?? '').split(';')) {
+    const [k, ...v] = part.trim().split('=');
+    if (k === name) return decodeURIComponent(v.join('='));
+  }
+  return '';
+}
+
+function sessionCookie(): string {
+  return `${SESSION_COOKIE}=${encodeURIComponent(env.apiToken)}; HttpOnly; SameSite=Strict; Path=/`;
+}
+
+/** Loopback Host headers only, so a DNS-rebound page cannot collect the session cookie. */
+function loopbackHostHeader(req: IncomingMessage): boolean {
+  const host = (req.headers.host ?? '').replace(/:\d+$/, '').replace(/^\[|\]$/g, '');
+  return isLoopback(host);
+}
+
+/* ------------------------------------------------------------------ UI */
+
+const UI_DIR = resolvePath(fileURLToPath(new URL('../../web/dist', import.meta.url)));
+
+const MIME: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.ico': 'image/x-icon',
+  '.webp': 'image/webp',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.wasm': 'application/wasm',
+  '.onnx': 'application/octet-stream',
+  '.txt': 'text/plain; charset=utf-8',
+};
+
+/** Map a URL path onto a file inside web/dist, or null if it is not one. */
+function uiFile(pathname: string): string | null {
+  let rel: string;
+  try {
+    rel = decodeURIComponent(pathname);
+  } catch {
+    return null;
+  }
+  const candidates = [rel, joinPath(rel, 'index.html'), `${rel.replace(/\/$/, '')}.html`];
+  for (const c of candidates) {
+    const abs = resolvePath(UI_DIR, `.${c}`);
+    if (abs !== UI_DIR && !abs.startsWith(UI_DIR + sep)) return null;
+    try {
+      if (statSync(abs).isFile()) return abs;
+    } catch {
+      /* try the next shape */
+    }
+  }
+  return null;
+}
+
+const UI_MISSING = `<!doctype html><meta charset="utf-8"><title>Funke</title>
+<body style="font:16px/1.5 system-ui;padding:40px;background:#0f1410;color:#f4f1ea">
+<h1>The Funke UI is not built yet</h1>
+<p>Run <code>npm run build</code> in the project folder, then reload this page.</p>
+</body>`;
 
 /** Is this address reachable only from this machine? */
 function isLoopback(host: string): boolean {
@@ -1070,11 +1151,42 @@ function send(res: ServerResponse, status: number, payload: unknown, contentType
   res.end(body);
 }
 
+/**
+ * Serve the built UI from web/dist. Pages hand the browser its session cookie;
+ * hashed assets are public build output and need no auth.
+ */
+function serveUi(req: IncomingMessage, res: ServerResponse, url: URL) {
+  if (!existsSync(UI_DIR)) return send(res, 503, UI_MISSING, 'text/html; charset=utf-8');
+  const file = uiFile(url.pathname);
+  if (!file) return send(res, 404, 'Not found', 'text/plain; charset=utf-8');
+  const type = MIME[extname(file).toLowerCase()] ?? 'application/octet-stream';
+  const headers: Record<string, string> = { 'content-type': type };
+
+  if (type.startsWith('text/html')) {
+    if (isLoopback(env.bindHost)) {
+      if (!loopbackHostHeader(req)) return send(res, 403, 'Open Funke at http://localhost', 'text/plain; charset=utf-8');
+    } else if (!authorized(req)) {
+      const offered = url.searchParams.get('token') ?? '';
+      if (!env.apiToken || !safeEqual(offered, env.apiToken)) {
+        return send(res, 401, 'Open this page once as /?token=<API_TOKEN>', 'text/plain; charset=utf-8');
+      }
+      res.writeHead(302, { location: url.pathname, 'set-cookie': sessionCookie(), 'cache-control': 'no-store' });
+      return res.end();
+    }
+    if (env.apiToken) headers['set-cookie'] = sessionCookie();
+    headers['cache-control'] = 'no-store';
+  } else {
+    headers['cache-control'] = url.pathname.startsWith('/_astro/') ? 'public, max-age=31536000, immutable' : 'no-cache';
+  }
+
+  res.writeHead(200, headers);
+  res.end(req.method === 'HEAD' ? undefined : readFileSync(file));
+}
+
 export function startServer(): void {
-  // Fail closed. The dashboard route below serves the API token to anyone who
-  // loads it, and the API it unlocks can publish to a real LinkedIn account —
-  // so an unauthenticated server that anything but this machine can reach is
-  // not a warning, it is a refusal.
+  // Fail closed. The UI pages hand out a session cookie that unlocks an API
+  // able to publish to real accounts, so an unauthenticated server that
+  // anything but this machine can reach is not a warning, it is a refusal.
   if (!isLoopback(env.bindHost)) {
     if (!env.bindAllowNonLoopback) {
       console.error(
@@ -1100,14 +1212,8 @@ export function startServer(): void {
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', `http://localhost:${env.port}`);
 
-    // The dashboard page carries the API token so the browser can call the API.
-    // That is only safe because the socket is loopback-only; if it ever is not,
-    // the page must be earned like every other route.
-    if (url.pathname === '/' || url.pathname === '/index.html') {
-      if (!isLoopback(env.bindHost) && !authorized(req)) {
-        return send(res, 401, { error: 'set Authorization: Bearer <API_TOKEN>' });
-      }
-      return send(res, 200, dashboardHtml(env.apiToken), 'text/html; charset=utf-8');
+    if (!url.pathname.startsWith('/api/') && (req.method === 'GET' || req.method === 'HEAD')) {
+      return serveUi(req, res, url);
     }
 
     // Google OAuth redirect has no Bearer header. Loopback-only is the safety.
@@ -1125,8 +1231,8 @@ export function startServer(): void {
            <body style="font:16px/1.5 system-ui;padding:40px;background:#0f1410;color:#f4f1ea">
            <h1>Google connected${email}</h1>
            <p>Funke can write events to your calendar now.</p>
-           <p><a href="/" style="color:#c4f061">Back to Funke</a></p>
-           <script>setTimeout(()=>location.href='/',1500)</script>
+           <p><a href="/?panel=settings" style="color:#c4f061">Back to Funke</a></p>
+           <script>setTimeout(()=>location.href='/?panel=settings',1500)</script>
            </body>`,
           'text/html; charset=utf-8',
         );
@@ -1154,11 +1260,12 @@ export function startServer(): void {
   });
 
   server.listen(env.port, env.bindHost, () => {
-    console.log(`social-media-automation-agent dashboard  http://localhost:${env.port}`);
+    console.log(`Funke                     http://localhost:${env.port}`);
+    if (!existsSync(UI_DIR)) console.log('UI                        not built yet. Run `npm run build`.');
     console.log(`bound to                  ${env.bindHost}${isLoopback(env.bindHost) ? ' (this machine only)' : '  ← REACHABLE FROM THE NETWORK'}`);
     // Ask the client what it actually is. This line used to guess from
     // ANTHROPIC_API_KEY alone, so adding Groq made it report 'mock' while
-    // generation was really running on Groq — the one line whose whole job is
+    // generation was really running on Groq: the one line whose whole job is
     // to tell you which provider you are on, quietly lying about it.
     console.log(`AI provider               ${buildAiClient().kind}`);
     if (!env.apiToken) {

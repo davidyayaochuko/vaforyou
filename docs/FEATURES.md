@@ -23,7 +23,7 @@ Last reviewed: 22 October 2026.
 
 | Status | Meaning |
 |---|---|
-| **Have** | Works today through chat or the classic dashboard (`:4310`). |
+| **Have** | Works today through chat or the UI (`:4310`). |
 | **Partial** | Some of it works, or it works through a stopgap (for example the Workspace MCP). |
 | **Planned** | Agreed direction, not built. |
 | **Later** | Wanted, but after the P0/P1 set ships. |
@@ -43,8 +43,8 @@ Last reviewed: 22 October 2026.
 | Feature | Status | Priority | Notes |
 |---|---|---|---|
 | Chat in plain English | Have | P0 | `POST /api/ask` → `handleVaCommand`. Astro Chat panel is wired to it. |
-| Multiple conversations, rename, archive, export | Have (dashboard), Partial (Astro) | P0 | Server has `/api/conversations/*`. Astro still stores threads in `localStorage`; move to server threads. |
-| Talk (hands-free conversation) | Have (dashboard), Have (Astro web) | P0 | Mic + Silero VAD (RMS fallback), Groq Whisper, reply, optional speech. Barge-in stops Funke mid-sentence. RNNoise enhance still planned. |
+| Multiple conversations, rename, archive, export | Partial | P0 | Server has `/api/conversations/*`. The UI still stores threads in `localStorage`; move to server threads. |
+| Talk (hands-free conversation) | Have | P0 | Mic + Silero VAD (RMS fallback), Groq Whisper, reply, optional speech. Barge-in stops Funke mid-sentence. RNNoise enhance still planned. |
 | Speak (read replies aloud) | Have | P0 | Azure Neural TTS when configured, browser `speechSynthesis` otherwise. |
 | Push-to-talk shortcut | Planned | P1 | Hold a key (web), global hotkey (desktop), Action Button or widget (mobile). |
 | Wake word ("Hey Funke") | Later | P2 | On-device only. Never streams the room to a server. |
@@ -179,7 +179,7 @@ Last reviewed: 22 October 2026.
 
 | Feature | Status | Priority | Notes |
 |---|---|---|---|
-| First-time tour | Have (dashboard) | P0 | Port to the Astro desktop. |
+| First-time tour | Planned | P0 | Build into the desktop UI. |
 | Deterministic help ("what can you do?") | Have | P0 | No invented menus. |
 | Connector setup wizard | Planned | P0 | Google, Microsoft, Slack, social accounts, voice, in that order. |
 | Sample day | Planned | P1 | Demo data so a new owner can try everything before connecting real accounts. |
@@ -192,7 +192,7 @@ Web first. Everything else reuses the web UI and the same API.
 
 | Surface | Approach | When | What it adds beyond web |
 |---|---|---|---|
-| **Web (desktop browsers)** | Astro app in `web/`, proxied to the Node API on `:4310`. | Now | The reference experience. Every feature lands here first. |
+| **Web (desktop browsers)** | Astro app in `web/`, built and served by the Node server on `:4310`. | Now | The reference experience. Every feature lands here first. |
 | **Web (mobile browsers)** | Responsive layout plus a Progressive Web App (PWA): manifest, install prompt, offline shell, Web Push. | P0 | Install to home screen on Android and iPhone, push reminders, mic for Talk. |
 | **macOS** | Tauri shell around the web app (small, native webview). | P1 | Menu bar icon, global hotkey for Talk, native notifications, launch at login, local meeting capture with a visible recording indicator, Keychain for tokens. |
 | **Windows** | Same Tauri shell. | P1 | System tray, global hotkey, toast notifications, start with Windows, Credential Manager for tokens. |
@@ -221,7 +221,7 @@ Web first. Everything else reuses the web UI and the same API.
 
 ### 4.2 Reaching Funke away from the desk
 
-The control API is loopback-only by design, and the dashboard page carries the API token. Phones and remote devices must not get there by opening the port. Options, in order of preference:
+The control API is loopback-only by design, and the UI pages hand out a session cookie that carries the API token. Phones and remote devices must not get there by opening the port. Options, in order of preference:
 
 1. **Tailscale (or WireGuard) to the owner's machine.** Phone joins the owner's private network; the API stays loopback-plus-tailnet. No public endpoint.
 2. **A relay with paired devices.** Each device pairs once with a short code, gets its own revocable token, and talks to the home machine through an encrypted relay. Revoking a device never rotates everyone else.

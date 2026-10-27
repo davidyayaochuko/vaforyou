@@ -19,7 +19,7 @@ export const env = {
   dbPath: resolve(str('DB_PATH', './data/pilot.db')),
   profilesDir: resolve(str('PROFILES_DIR', './data/profiles')),
   port: Number(str('PORT', '4310')),
-  // Loopback by default. The dashboard hands the API token to whoever loads it,
+  // Loopback by default. The UI hands a session cookie to whoever loads it,
   // and the API can post to a real LinkedIn account, so binding this to every
   // interface puts both on the local network. Override only on purpose.
   // Loopback only unless BIND_ALLOW_NON_LOOPBACK=true AND API_TOKEN is set.

@@ -36,18 +36,13 @@ knowledge/*.md
 !knowledge/*.example.md
 !knowledge/README.md
 
-# Local QA outputs (screenshots, persona transcripts). Briefs/docs under qa/ can ship.
-qa/**/persona-results/
-qa/**/screenshots/
-qa/**/*.png
 /tmp/
 
-# Local integrations that are nobody else's business.
+# Local-only integrations and test env copies
 scripts/rail.ts
-com.crewhq.rail.plist
-
-# Usage-test env copies and ad-hoc logs (never commit)
 /tmp/funke-*
 *.local.json
 .env.local
 .env.usage
+.claude/
+qa/

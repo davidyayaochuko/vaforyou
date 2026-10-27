@@ -3,7 +3,7 @@
 Copy to `instructions/bluesky.md` to make it yours. That file is git-ignored.
 
 **Account:** a personal Bluesky account. The audience skews technical, early, and
-allergic to marketing language — a lot of them left X specifically to get away from
+allergic to marketing language. A lot of them left X specifically to get away from
 growth-hacking.
 
 ## Shape

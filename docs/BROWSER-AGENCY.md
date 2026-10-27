@@ -7,8 +7,8 @@ Funke can operate a **headed Playwright** browser for non-social tasks (forms, b
 | Action | Behaviour |
 |---|---|
 | Browse, read page, fill fields | Allowed when Playwright MCP is configured |
-| Submit form / send | Approvals rail (`browser.submit`) — not auto |
-| Pay / checkout / card entry | **Hard blocked** — owner finishes pay |
+| Submit form / send | Approvals rail (`browser.submit`), not auto |
+| Pay / checkout / card entry | **Hard blocked**, owner finishes pay |
 | Social account profiles | **Never opened** by this lane |
 
 ## Enable (spike)

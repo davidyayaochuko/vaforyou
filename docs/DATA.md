@@ -87,7 +87,7 @@ If you run Funke for a company or process personal data of others:
 
 - **NDPA (Nigeria)** and **GDPR** (if EU data subjects) still apply to you as
   the operator. This tool does not make you compliant by itself.
-- Prefer loopback bind (`127.0.0.1`). Do not expose the dashboard without a
+- Prefer loopback bind (`127.0.0.1`). Do not expose Funke without a
   strong `API_TOKEN`.
 - Do not commit `data/`, `.env`, or browser profiles.
 - Document any third-party processing you enable (Groq, Google, SMTP).

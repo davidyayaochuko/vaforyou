@@ -1,7 +1,7 @@
 /**
  * The setup wizard's one page.
  *
- * Everything is inline — no CDN, no font, no image, nothing fetched from
+ * Everything is inline: no CDN, no font, no image, nothing fetched from
  * anywhere. This page is served for about two minutes on 127.0.0.1 and then the
  * server exits, and it should not need the internet to render.
  */
@@ -178,7 +178,7 @@ function render() {
   ];
   $('checks').innerHTML = rows.map(([label, ok, hint]) =>
     '<li><span class="dot ' + (ok ? 'ok' : 'warn') + '"></span><span>' + label +
-    (ok || !hint ? '' : ' <span style="opacity:.6">— ' + hint + '</span>') + '</span></li>').join('');
+    (ok || !hint ? '' : ' <span style="opacity:.6">(' + hint + ')</span>') + '</span></li>').join('');
 
   $('finish').style.display = linked ? 'block' : 'none';
 }
@@ -200,7 +200,7 @@ $('saveKey').onclick = async () => {
     (r.switched ? ' (the configured one was retired, so this replaced it)' : '') + '.' +
     (r.seeded && r.seeded.length
       ? '<br>Your brief and template bank are now in <code>instructions/</code> and ' +
-        '<code>templates/</code> — edit them to sound like you.'
+        '<code>templates/</code>. Edit them to sound like you.'
       : ''), 'ok');
   $('key').value = '';
   poll();
@@ -232,9 +232,9 @@ $('done').onclick = async () => {
   document.body.innerHTML =
     '<div class="wrap"><h1>Done.</h1><p class="sub">Back to your terminal:</p>' +
     '<div class="card"><div class="body" style="margin:0">' +
-    '<p><code>npm run start</code> — the dashboard, on port ' + (state.port || 4310) + '. ' +
-    'The engine stays stopped until you press the button.</p>' +
-    '<p><code>npm run doctor</code> — if anything ever looks wrong.</p>' +
+    '<p><code>npm run build</code>, then <code>npm run start</code>. Funke opens on port ' + (state.port || 4310) + '. ' +
+    'The engine stays stopped until you press Start in Settings.</p>' +
+    '<p><code>npm run doctor</code> if anything ever looks wrong.</p>' +
     '</div></div></div>';
 };
 

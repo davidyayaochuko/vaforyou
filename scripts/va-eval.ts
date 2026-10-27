@@ -7,6 +7,8 @@
  *   npm run va:eval
  *   npm run va:eval -- --live
  */
+import './test-db.ts';
+import { initSchema } from '../src/db/index.ts';
 import { clearSession, setPending, pushTurn } from '../src/va/session.ts';
 import { handleVaCommand } from '../src/va/command.ts';
 import { deleteCalendarEvent, listUpcomingEvents } from '../src/va/store.ts';
@@ -130,6 +132,7 @@ async function scenarioLiveReschedule(live: boolean): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  initSchema();
   ensureVaTables();
   const live = process.argv.includes('--live');
   console.log(`Funke VA eval${live ? ' (live)' : ' (deterministic + optional skip)'}`);

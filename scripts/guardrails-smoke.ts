@@ -2,6 +2,7 @@
  * Phase 0a guardrail checks. No network, no browser.
  *   npm run guardrails
  */
+import './test-db.ts';
 import { initSchema } from '../src/db/index.ts';
 import { ensureVaTables } from '../src/va/store.ts';
 import { checkHardBoundary, isHardBlocked } from '../src/guardrails/boundaries.ts';
@@ -127,7 +128,7 @@ async function main(): Promise<void> {
   const audit = searchAudit({ limit: 20 });
   check('audit has rows', audit.length > 0, audit.length);
 
-  console.log(failed ? `\nFAIL — ${failed} checks` : '\nPASS — guardrails');
+  console.log(failed ? `\nFAIL: ${failed} checks` : '\nPASS: guardrails');
   process.exit(failed ? 1 : 0);
 }
 

@@ -10,7 +10,7 @@ Helper teardown the design came from.
 ## 1. What this is in one paragraph
 
 A single Node process that drives one real browser per social account
-(LinkedIn, X) — to post, comment, react, DM, and engage with feeds on the
+(LinkedIn, X), to post, comment, react, DM, and engage with feeds on the
 owner's behalf, plus run a LinkedIn outreach funnel. It is architecturally a clone of
 Linked Helper: the session lives locally in a persistent Chromium profile, work is a
 queue of small steps, and safety comes from pacing and rolling rate caps rather than
@@ -36,7 +36,7 @@ is not.
 
 ## 3. Control flow, precisely
 
-### `Engine.tick()` — `src/engine/scheduler.ts`
+### `Engine.tick()`, `src/engine/scheduler.ts`
 
 One tick does **at most one action**, then returns how long to sleep.
 
@@ -68,14 +68,14 @@ being due. But an account with a large funnel backlog **will monopolise the loop
 until its queue drains or hits a cap. If that becomes a problem, rotate the starting
 index of the `byAccount` iteration.
 
-### `pickWork()` — the Linked Helper rule
+### `pickWork()`, the Linked Helper rule
 
 For each running campaign, scan steps from the **last position backwards** and take
 the first step that has a due lead and passes its quota. This drains people already
 deep in the funnel before pulling new people in at the top. Do not "fix" this to scan
 forwards; it is deliberate and documented in `ARCHITECTURE.md §2`.
 
-### `runStep()` — `src/engine/runner.ts`
+### `runStep()`, `src/engine/runner.ts`
 
 All queue-state transitions live here. Actions stay close to pure.
 
@@ -100,44 +100,44 @@ applyResult(...)
 | `advance:false` | Hold for `waitSeconds ?? 3600`. Stay on this step. |
 | otherwise | Advance by `detail.jumped ?? 1`; past the last step → `exitLead('done')`. |
 
-### `runJob()` — `src/engine/jobs.ts`
+### `runJob()`, `src/engine/jobs.ts`
 
 Nine kinds. The first four are the original engine:
 
-- **`generate_post`** — picks a template by rotation, generates, gates, writes a
+- **`generate_post`**, picks a template by rotation, generates, gates, writes a
   `content` row as `queued` (passed) or `blocked` (failed). **No browser touched.**
-- **`publish_due`** — takes the oldest due `queued` row, checks quota, **re-gates it**,
+- **`publish_due`**, takes the oldest due `queued` row, checks quota, **re-gates it**,
   navigates to `target_ref` if set, calls `adapter.post()`. Publishes **one** item
   per run.
-- **`engage_feed`** — reads the feed, one structured model call decides the whole
+- **`engage_feed`**, reads the feed, one structured model call decides the whole
   batch, then acts within caps. Comments go through `generate()` → gate like any
   other outbound text.
-- **`send_dm`** — takes `body` (gated) or `brief` (generated + gated), then
+- **`send_dm`**, takes `body` (gated) or `brief` (generated + gated), then
   `adapter.dm()`.
 
-The rest are LinkedIn's targeted actions — they act on a URL you named rather than on
+The rest are LinkedIn's targeted actions, they act on a URL you named rather than on
 whatever the feed served up. Each sub-action is quota-checked separately, so hitting
 the comment cap still lets the reaction through:
 
-- **`engage_post`** `{url, reaction?, comment?|brief?, repost?}` — react, comment
+- **`engage_post`** `{url, reaction?, comment?|brief?, repost?}`, react, comment
   and/or share one specific post. A repost "with your thoughts" publishes text under
   your own name, so it is gated as a `post`, not as a comment.
-- **`reply_comments`** `{postUrl?, max}` — answers comments on your own posts,
+- **`reply_comments`** `{postUrl?, max}`, answers comments on your own posts,
   defaulting to your most recent ones. Skips your own comments by handle, and records
   every comment as handled *even when the gate blocks the reply*, or a blocked reply
   is retried forever until the cap absorbs the whole job.
-- **`grow_network`** `{maxAccept, criteria?, withdrawAfterDays?}` — accepts the
+- **`grow_network`** `{maxAccept, criteria?, withdrawAfterDays?}`, accepts the
   invitations worth accepting (a structured model call ranks them on the headline,
   which is all the card shows) and withdraws stale ones you sent.
-- **`visit_profiles`** `{urls, max}` — the read is incidental; the visit is the
+- **`visit_profiles`** `{urls, max}`, the read is incidental; the visit is the
   action, because the other person is notified.
 - **`follow_targets`** `{urls, max}`.
 
 **Asymmetry worth knowing:** `engage_feed` loops internally up to `maxActions`, with a
 full human gap between each. One job run can therefore hold the browser for several
 minutes, unlike every other path which is strictly one-action-per-tick. That is
-deliberate — a feed session that likes three things over four minutes looks like a
-person reading a feed — but it means the account is busy for that whole window.
+deliberate, a feed session that likes three things over four minutes looks like a
+person reading a feed, but it means the account is busy for that whole window.
 
 `finishJob()`: a recurring job re-arms at `now + interval + up to 20% jitter`; a
 one-shot is marked `done`; a one-shot that failed three times is `disabled` rather
@@ -168,7 +168,7 @@ publish_due job → gate() AGAIN → adapter.post()
 row you can read and fix, and the expensive model call never sits inside the publish
 path.
 
-### The gate — `src/content/gate.ts`
+### The gate, `src/content/gate.ts`
 
 Ported from an earlier `checkContent`. The reason it exists is recorded there: a test
 post correctly declared its own account type and then broke that exact rule in the
@@ -189,9 +189,9 @@ against recent published bodies on that account).
 ### ⚠️ In mock mode, all content generation blocks
 
 `MockClient.text()` returns a string containing an em-dash, which the gate bans. So
-**with no AI key set at all — no `GROQ_API_KEY`, and no `ANTHROPIC_API_KEY` paired
-with `AI_PAID=true` — every `draft_content` / `generate_post` returns `blocked`.**
-That is correct behaviour, not a bug — smoke check #11 asserts exactly
+**with no AI key set at all, no `GROQ_API_KEY`, and no `ANTHROPIC_API_KEY` paired
+with `AI_PAID=true`, every `draft_content` / `generate_post` returns `blocked`.**
+That is correct behaviour, not a bug, smoke check #11 asserts exactly
 this ("generation fails CLOSED"). Do not "fix" the mock to pass the gate; the funnel
 and every non-content path still work fine in mock mode.
 
@@ -220,16 +220,16 @@ Repositories: `src/db/index.ts` (accounts, campaigns, leads, funnel, log) and
 
 ## 6. Rate limiting
 
-`src/engine/limits.ts`. **Rolling windows, not calendar days** — 24h and 1h, computed
+`src/engine/limits.ts`. **Rolling windows, not calendar days**, 24h and 1h, computed
 by counting `action_log` rows where `counted = 1`. You cannot spend a day's quota at
 23:59 and another at 00:01.
 
 Resolution order (later wins): `DEFAULT_LIMITS` → the platform adapter's
 `defaultLimits` → `settings.limits` → `settings.limits.<platform>`. Settings always
-win, so the dashboard and `set_limits` remain the single control.
+win, so `POST /api/limits` and `set_limits` remain the single control.
 
 `_total` is a ceiling across every rate-limited action for that account (100/day,
-20/hour). Working hours are **global**, not per account — a known limitation.
+20/hour). Working hours are **global**, not per account, a known limitation.
 
 Only `status:'ok'` on a `ratedLimited` action consumes quota. Failures are free,
 which is what stops a broken selector from eating the day's budget.
@@ -244,7 +244,7 @@ threads, line caps), `defaultLimits`, `sel` (every selector), and the methods
 Selector conventions, and they matter:
 
 - **Never** match on generated class names. Both platforms obfuscate and rotate them.
-- X uses `data-testid` consistently — prefer it there.
+- X uses `data-testid` consistently, prefer it there.
 - Elsewhere use `aria-label`, roles, and visible text.
 - **Every target is a list of candidates**, tried in order by `firstVisible()`, because
   these platforms A/B-test two or three variants of the same control simultaneously.
@@ -253,17 +253,17 @@ Selector conventions, and they matter:
 rendered list, and `engage` re-locates it by that index. If the feed reflows between
 read and engage, the index can point at a different post. The adapters guard with an
 `isVisible()` check and bail rather than click blind, but this is the most fragile
-part of the engagement path. If you harden one thing, harden this — matching on the
+part of the engagement path. If you harden one thing, harden this, matching on the
 permalink instead of the index would be the fix.
 
-## 8. Invariants — do not relax these without changing the tests
+## 8. Invariants, do not relax these without changing the tests
 
 1. `leads.profile_url` normalized is the dedup key across every table, forever.
 2. Nothing publishes without passing `gate()`, and the gate runs **again** immediately
    before the browser acts. No bypass parameter exists.
 3. A post's `template_id` must be in `templates/`. That is the boundary on autonomy.
 4. Generation **fails closed**. A missed post costs nothing; a bad post is public.
-5. Stop-on-reply is structural, not a setting — nobody gets a follow-up after they
+5. Stop-on-reply is structural, not a setting, nobody gets a follow-up after they
    answer (`src/actions/messaging.ts`).
 6. The suppression list is permanent, global, and applied inside the queue query
    itself, not by callers remembering to check.
@@ -292,13 +292,13 @@ permalink instead of the index would be the fix.
   `replyToComment` matches the comment's own words.
 - **`ageInDays()` returns 0 for anything it cannot parse.** Withdrawal reads the
   card's own "Sent 2 months ago" wording, and an unparsed card must read as brand new
-  — withdrawing a fresh invite wastes the weekly quota the job exists to protect.
+ , withdrawing a fresh invite wastes the weekly quota the job exists to protect.
 - **X `splitThread()`** turns a body whose lines start `1/`, `2/` into separate
   tweets. The gate then caps each tweet at 280 individually.
 
 ## 10. Verified vs. unverified
 
-`npm run smoke` — 74 checks, no credentials, no network, no browser. Covers URL
+`npm run smoke`, 74 checks, no credentials, no network, no browser. Covers URL
 normalization, the three workflow-validation traps, the funnel queue end-to-end, the
 rolling limiter (including failures not consuming quota), 13 gate checks, template
 rotation fairness, X thread splitting, instruction loading, generation failing

@@ -3,7 +3,7 @@
  *
  *   npm run doctor
  *
- * Read-only. It opens no browser, touches no account, and publishes nothing —
+ * Read-only. It opens no browser, touches no account, and publishes nothing:
  * the one network call is a free `/models` lookup to prove the AI key is live.
  * Use it after `npm run setup`, and when a scheduled job starts failing for a
  * reason the log does not explain.
@@ -20,34 +20,34 @@ const bad = (label: string, fix: string) => {
   console.log(`  FAIL  ${label}\n        ${fix}`);
 };
 
-console.log('\nsocial-media-automation-agent doctor\n───────────────');
+console.log('\nFunke doctor\n───────────────');
 
 // node:sqlite is the database; it does not exist before 22.5.
 const [major = 0, minor = 0] = process.versions.node.split('.').map(Number);
 if (major > 22 || (major === 22 && minor >= 5)) ok('node', process.versions.node);
-else bad(`node ${process.versions.node}`, 'needs 22.5+ for node:sqlite — `nvm install 22`');
+else bad(`node ${process.versions.node}`, 'needs 22.5+ for node:sqlite, `nvm install 22`');
 
 if (existsSync(new URL('../.env', import.meta.url))) ok('.env');
 else bad('.env missing', 'run `npm run setup`');
 
 if (env.apiToken) ok('API_TOKEN', 'set');
-else warn('API_TOKEN blank', 'the control API is unauthenticated to anything on this machine — run `npm run setup`');
+else warn('API_TOKEN blank', 'the control API is unauthenticated to anything on this machine. Run `npm run setup`');
 
-// The dashboard serves the API token to whoever loads it, and that token can
+// The UI hands its session cookie to whoever loads it, and that session can
 // publish to a real account. Loopback is what makes that acceptable.
 if (env.bindHost === '127.0.0.1' || env.bindHost === 'localhost' || env.bindHost === '::1') {
   ok('BIND_HOST', `${env.bindHost} (this machine only)`);
 } else if (env.apiToken) {
-  warn(`BIND_HOST ${env.bindHost}`, 'the dashboard is reachable from the network; it is token-gated, but loopback is safer');
+  warn(`BIND_HOST ${env.bindHost}`, 'Funke is reachable from the network; it is token-gated, but loopback is safer');
 } else {
-  bad(`BIND_HOST ${env.bindHost} with no API_TOKEN`, 'the server will refuse to start — set API_TOKEN or BIND_HOST=127.0.0.1');
+  bad(`BIND_HOST ${env.bindHost} with no API_TOKEN`, 'the server will refuse to start, set API_TOKEN or BIND_HOST=127.0.0.1');
 }
 
 // .env holds the AI key and the control token.
 const envFile = new URL('../.env', import.meta.url);
 if (existsSync(envFile)) {
   const mode = statSync(envFile).mode & 0o777;
-  if (mode & 0o077) warn(`.env is mode ${mode.toString(8)}`, 'others on this machine can read your keys — `chmod 600 .env`');
+  if (mode & 0o077) warn(`.env is mode ${mode.toString(8)}`, 'others on this machine can read your keys, `chmod 600 .env`');
   else ok('.env permissions', '600');
 }
 
@@ -64,7 +64,7 @@ if (ai.kind === 'mock') {
   if (!res.ok && res.status === 401) {
     bad('XAI_API_KEY / GROK_API_KEY rejected', 'create a key at https://console.x.ai (keys usually look like xai-…). Cursor BYOK keys are not the same thing.');
   } else if (!res.ok) {
-    warn('AI provider: xai (grok)', `${res.error} — model ${env.xaiModel}`);
+    warn('AI provider: xai (grok)', `${res.error}, model ${env.xaiModel}`);
   } else if (res.ids.length === 0 || res.ids.includes(env.xaiModel)) {
     ok('AI provider: xai (grok)', env.xaiModel);
   } else {
@@ -101,7 +101,7 @@ if (!existsSync(env.dbPath)) {
     warn('no accounts connected', 'e.g. `npm run login -- linkedin --platform linkedin`');
   } else {
     for (const a of accounts) {
-      const profile = `${env.profilesDir}/${a.name}`;
+      const profile = a.profile_dir || `${env.profilesDir}/${a.name}`;
       if (existsSync(profile)) ok(`account ${a.name}`, a.platform ?? 'linkedin');
       else bad(`account ${a.name} has no browser profile`, `re-run \`npm run login -- ${a.name}\``);
     }
@@ -111,7 +111,7 @@ if (!existsSync(env.dbPath)) {
 if (env.paused) warn('PAUSED=1', 'the scheduler will refuse to run anything until this is 0');
 
 if (!env.slackUserToken.trim()) {
-  warn('SLACK_USER_TOKEN blank', 'Slack digest/send stays off — create a Slack app user token (xoxp-) and set SLACK_USER_TOKEN');
+  warn('SLACK_USER_TOKEN blank', 'Slack digest/send stays off, create a Slack app user token (xoxp-) and set SLACK_USER_TOKEN');
 } else if (!/^xoxp-/i.test(env.slackUserToken.trim())) {
   warn('SLACK_USER_TOKEN shape', 'expected a user token starting with xoxp- (bot tokens are less useful for “act as you”)');
 } else {
@@ -120,7 +120,7 @@ if (!env.slackUserToken.trim()) {
 
 // Optional private SearXNG for Chat research. Unset = memory/KB only (fine).
 if (!env.searxngUrl.trim()) {
-  warn('SEARXNG_URL blank', 'web research stays off — `docker compose -f deploy/searxng/compose.yml up -d` then set SEARXNG_URL=http://127.0.0.1:8080');
+  warn('SEARXNG_URL blank', 'web research stays off, `docker compose -f deploy/searxng/compose.yml up -d` then set SEARXNG_URL=http://127.0.0.1:8080');
 } else {
   try {
     const base = env.searxngUrl.replace(/\/$/, '');
@@ -134,12 +134,12 @@ if (!env.searxngUrl.trim()) {
     const ctype = res.headers.get('content-type') || '';
     if (!res.ok) warn(`SearXNG ${base}`, `HTTP ${res.status}`);
     else if (!/json/i.test(ctype)) {
-      warn(`SearXNG ${base}`, 'returned non-JSON — enable json in deploy/searxng/settings.yml and restart');
+      warn(`SearXNG ${base}`, 'returned non-JSON, enable json in deploy/searxng/settings.yml and restart');
     } else ok('SearXNG', base);
   } catch (err) {
     warn(
       `SearXNG unreachable (${env.searxngUrl})`,
-      `${err instanceof Error ? err.message : String(err)} — start with docker compose -f deploy/searxng/compose.yml up -d`,
+      `${err instanceof Error ? err.message : String(err)}, start with docker compose -f deploy/searxng/compose.yml up -d`,
     );
   }
 }

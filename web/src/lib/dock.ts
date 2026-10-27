@@ -13,6 +13,7 @@ export type AppKey =
   | 'meetings'
   | 'notes'
   | 'socials'
+  | 'settings'
   | 'slack';
 
 /** Any open panel id (dock + launcher destinations). */
@@ -83,6 +84,14 @@ export const APPS: AppMeta[] = [
     group: 'Communication',
     live: true,
     tryAsks: ['Draft a LinkedIn post about our launch', 'What’s waiting to be posted?'],
+  },
+  {
+    key: 'settings',
+    title: 'Settings',
+    blurb: 'Social engine, Google Calendar, voice and memory.',
+    icon: 'settings',
+    group: 'Everyday',
+    live: true,
   },
   {
     key: 'mail',

@@ -4,11 +4,7 @@
  *
  *   npm run usage:regression
  */
-import { config } from 'dotenv';
-config({ path: process.env.USAGE_ENV || '.env' });
-
-process.env.DB_PATH = process.env.DB_PATH || `/tmp/funke-usage-reg-${Date.now()}.db`;
-
+import './test-db.ts';
 import { initSchema, upsertAccount, setAccountStatus } from '../src/db/index.ts';
 import { ensureVaTables } from '../src/va/store.ts';
 import { checkHardBoundary, isHardBlocked } from '../src/guardrails/boundaries.ts';
@@ -68,8 +64,8 @@ async function main(): Promise<void> {
 
   const draftClarify = await handleVaCommand('Draft a LinkedIn post about shipping cadence');
   check(
-    'multi linkedin asks which account',
-    /which linkedin account/i.test(draftClarify.reply),
+    'multi linkedin names the default account and how to switch',
+    /Using \S+ \(say another LinkedIn account/i.test(draftClarify.reply),
     draftClarify.reply,
   );
 

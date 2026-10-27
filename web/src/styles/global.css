@@ -2064,6 +2064,24 @@ button.widget:hover {
   text-decoration: underline;
 }
 
+button.panel-link {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.plist-section + .plist-section {
+  margin-top: 18px;
+}
+
+.plist-section .quick-ask-row {
+  margin-bottom: 8px;
+}
+
 /* Loading / empty / error */
 
 .pstate {

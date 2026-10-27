@@ -8,7 +8,7 @@ become customers or who already know you.
 ## Shape
 
 Six short lines maximum. No paragraph blocks. If it does not fit in six lines you
-have not found the point yet — cut, do not compress.
+have not found the point yet. Cut, do not compress.
 
 The first one or two lines are all that shows before LinkedIn's "see more"
 truncation. Assume nobody reads past the hook unless it earns the click.

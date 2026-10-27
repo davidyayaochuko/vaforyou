@@ -1,40 +1,40 @@
 # Funke web UI
 
-Astro frontend. Home is a **macOS-style desktop**: menu bar, corner widgets, dock, open space, and a **3D** voice orb.
-
-## Design reference (official)
-
-Use Apple’s free kits, not third-party Big Sur packs:
-
-- [Apple Design Resources](https://developer.apple.com/design/resources/) → **macOS UI Kit** (Figma / Sketch)
-- [SF Pro](https://developer.apple.com/fonts/) · [SF Symbols](https://developer.apple.com/sf-symbols/)
-- How we map kit → code: [`docs/APPLE-DESIGN.md`](docs/APPLE-DESIGN.md)
-
-Tokens in `src/styles/bigsur.css` approximate system colors + Liquid Glass materials in CSS. The Figma kit stays in Figma for comps.
+Astro + React frontend. The home screen is a desktop: menu bar, corner widgets, a
+dock, and a 3D voice orb (Three.js with React Three Fiber).
 
 ## Run
 
+In production the Node server serves the built UI. From the repo root:
+
 ```bash
-npm install --prefix web
-npm run ui
+npm run build
+npm run start      # http://localhost:4310
 ```
 
-Open **http://127.0.0.1:4330/**
+For UI work, run the dev server with hot reload next to the API:
+
+```bash
+npm run dev        # API on :4310
+npm run ui         # UI on http://127.0.0.1:4330, proxies /api to :4310
+```
+
+The dev proxy reads `API_TOKEN` from the root `.env` and adds it to every `/api`
+request.
 
 | Route | What |
 |---|---|
 | `/` | Desktop home |
-| `/?panel=chat` | Window panel open |
-| `/home`, `/chat` | Redirect into `/` |
+| `/?panel=<name>` | Opens a panel: `chat`, `tasks`, `calendar`, `approvals`, `socials`, `settings` |
 
-**Speak · Talk · Chat** under the orb. Model + engine in the menu bar.
+## Where things live
 
-API proxy: `/api/*` → `http://127.0.0.1:4310` when `npm run start` is up.
-
-## Icons
-
-Filled paths in `src/lib/icons.ts` for now. Prefer SF Symbols exports when you pull glyphs from Apple’s app.
-
-## Voice orb
-
-Three.js / R3F barred sphere — only 3D element. Notes: `src/lib/orb-notes.md`.
+| Path | What |
+|---|---|
+| `src/components/PanelHost.tsx` | Opens and closes panels |
+| `src/components/panels/` | One component per panel |
+| `src/lib/dock.ts` | The app list: titles, icons, which apps are live |
+| `src/lib/api.ts` | Typed client for the control API |
+| `src/lib/voice*.ts` | Mic, voice activity detection, noise suppression, speech |
+| `src/lib/icons.ts` | Filled 24x24 icon paths |
+| `src/styles/` | Design tokens and component styles |

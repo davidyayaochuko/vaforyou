@@ -1,8 +1,8 @@
-# Operating brief — every account
+# Operating brief: every account
 
 Copy this to `instructions/GLOBAL.md` and make it yours. That file is git-ignored,
 so your version stays on your machine. This one is the fallback if it does not
-exist, and it is written to be usable as-is — but a brief that still says
+exist, and it is written to be usable as-is, but a brief that still says
 "YOUR NAME" will produce copy that sounds like nobody.
 
 ---
@@ -36,7 +36,7 @@ spend attempts trying.
 - **Short sentences. Ordinary words.** If a phrase would not survive being said out
   loud to one person, cut it.
 - **End on a stance, not a question.** "Here is what I am doing about it" beats
-  "What do you think?" — engagement bait reads as engagement bait.
+  "What do you think?" Engagement bait reads as engagement bait.
 - **No em-dashes, no emoji, no hashtag runs.** All three are enforced in code.
 
 ## 3. Never
@@ -61,7 +61,7 @@ The rate limiter enforces the caps whatever this file says. It is not a target.
 ## 5. Engaging with other people's posts
 
 The bar for a comment: **you have something specific to add that the author does not
-already know.** Otherwise react, or skip. "Great post!" is worse than silence — it
+already know.** Otherwise react, or skip. "Great post!" is worse than silence: it
 is visible, it is public, and it says you were not really reading.
 
 Skip anything promotional, political, hostile, or from an account that looks

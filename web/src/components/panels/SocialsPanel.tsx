@@ -26,7 +26,7 @@ export default function SocialsPanel() {
           Social engine is <strong>{data?.engineOn ? 'on' : 'off'}</strong>.{' '}
           {data?.engineOn
             ? 'Approved posts publish on schedule.'
-            : 'Nothing posts while it is off. Start it from the classic dashboard.'}
+            : 'Nothing posts while it is off. Start it from Settings.'}
         </span>
       </div>
       <PanelState
@@ -55,9 +55,13 @@ export default function SocialsPanel() {
           })}
         </ul>
       </PanelState>
-      <a className="panel-link" href="http://127.0.0.1:4310/" target="_blank" rel="noreferrer">
-        <Glyph name="export" size={12} /> Open the classic dashboard for drafts, queue and engine controls
-      </a>
+      <button
+        type="button"
+        className="panel-link"
+        onClick={() => window.dispatchEvent(new CustomEvent('funke:open', { detail: { panel: 'settings' } }))}
+      >
+        <Glyph name="settings" size={12} /> Engine controls are in Settings
+      </button>
       <TryChips asks={appMeta('socials').tryAsks} />
     </div>
   );

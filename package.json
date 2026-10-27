@@ -2,8 +2,13 @@
   "name": "vaforyou",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/davidyayaochuko/vaforyou.git"
+  },
   "type": "module",
-  "description": "Funke is a self-hosted personal VA. Manages LinkedIn and X from a browser you are logged into, plus calendar, reminders, and follow-ups with timezone-aware scheduling and Google Calendar SSO. No SaaS; free LLM tier; runs on your machine.",
+  "description": "Funke is a self-hosted personal assistant. Chat or talk to it, and it manages your calendar, reminders, follow-ups and LinkedIn, X and Bluesky from browsers you are logged into. Runs on your machine on a free LLM tier.",
   "engines": {
     "node": ">=22.5.0"
   },
@@ -22,6 +27,7 @@
     "dev": "tsx watch src/server/index.ts",
     "ui": "npm run dev --prefix web",
     "ui:build": "npm run build --prefix web",
+    "build": "npm run build --prefix web",
     "ui:check": "npm run check --prefix web",
     "mcp": "tsx src/mcp/server.ts",
     "smoke": "tsx scripts/smoke.ts",
@@ -36,11 +42,10 @@
     "draft": "tsx scripts/write.ts",
     "queue": "tsx scripts/write.ts",
     "publish": "tsx scripts/write.ts",
-    "postinstall": "playwright install chromium",
+    "postinstall": "npm install --prefix web && playwright install chromium",
     "login:all": "tsx scripts/login-all.ts",
     "whoami": "tsx scripts/whoami.ts",
-    "unlock:x": "tsx scripts/unlock-x.ts",
-    "rail": "tsx scripts/rail.ts"
+    "unlock:x": "tsx scripts/unlock-x.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.70.0",

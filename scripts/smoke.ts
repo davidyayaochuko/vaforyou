@@ -4,7 +4,7 @@
  * It exercises the parts that must be right before you ever point this at a real
  * account: URL normalization, workflow validation (including the funnel-logic traps),
  * the queue state machine, the rolling rate limiter, and the AI layer via its mock.
- * Browser actions are covered by a stub page — this proves the engine, not the
+ * Browser actions are covered by a stub page. This proves the engine, not the
  * selectors. Selectors can only be proven against a live logged-in session.
  *
  *   npm run smoke
@@ -203,12 +203,10 @@ check('a post with no template id is rejected',
 check('an unapproved template id is rejected',
   !g('Shipped 3 fixes today.', { templateId: 'linkedin.made-this-up' }).pass);
 
-// The second source of authority. An upstream system writes a post, reviews it,
-// HQ's content law checks it in code, HQ's surface gate rules on it, and the
-// founder's door opens for that specific deliverable — then the rail carries
-// it. Requiring a template match on top of that chain would not add safety; it
-// would mean no HQ post could ever be published, which is exactly what happened
-// on the first four.
+// The second source of authority. The owner reviews and approves a post in an
+// upstream system, and an integration queues it here. Requiring a template
+// match on top of that review would not add safety; it would mean no
+// owner-approved post could ever be published.
 // The breach of 2026-08-14, as a check that cannot pass again.
 {
   const li = getPlatform('linkedin');
@@ -366,5 +364,5 @@ check('LinkedIn keeps its own visit cap, not the generic one',
   liLimits.visit_profile?.perDay === 40, liLimits.visit_profile);
 check('the new targeted caps are in force', liLimits.react_post?.perDay === 20 && liLimits.repost?.perDay === 3);
 
-console.log(`\n${failures === 0 ? 'PASS' : `FAIL (${failures})`} — db at ${process.env.DB_PATH}`);
+console.log(`\n${failures === 0 ? 'PASS' : `FAIL (${failures})`}, db at ${process.env.DB_PATH}`);
 process.exit(failures === 0 ? 0 : 1);

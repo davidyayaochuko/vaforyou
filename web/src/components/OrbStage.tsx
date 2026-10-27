@@ -52,27 +52,8 @@ export default function OrbStage({ size = 400 }: Props) {
   const [snap, setSnap] = useState<VoiceSnapshot | null>(null);
 
   useEffect(() => {
-    const v = voice(); // also publishes window.__funkeVoice for harness / debug
+    const v = voice(); // also publishes window.__funkeVoice for debugging
     return v.subscribe(setSnap);
-  }, []);
-
-  // Optional QA harness: /?harness=1 runs all four personas across voice turns.
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (new URLSearchParams(window.location.search).get('harness') !== '1') return;
-    let cancelled = false;
-    void import('../lib/personaHarness').then(async ({ installPersonaHarness, runPersonaHarness }) => {
-      installPersonaHarness();
-      if (cancelled) return;
-      const summary = await runPersonaHarness();
-      if (!cancelled) {
-        (window as unknown as { __funkePersonaSummary?: unknown }).__funkePersonaSummary = summary;
-        console.info('[funke harness]', summary);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   // Space toggles conversation: press once to open the mic, again to close. No hold.

@@ -11,7 +11,5 @@ cp knowledge/usage-company.example.md knowledge/usage-company.md
 
 Edit the copies. Funke loads every `knowledge/*.md` that is not an `.example.` file.
 
-Keep domains separate on purpose:
-- `albion-online.md` — official Albion site guides only (no Wikipedia).
-- `speech-world.md` — how Funke speaks, thinks, and acts (Wikipedia).
-- `nigeria-culture.md` — Nigerian culture, food, arts, everyday world (Wikipedia).
+Keep one topic per file. Funke cites the file it answered from, and narrow files
+make those citations useful.

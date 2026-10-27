@@ -28,7 +28,7 @@ Three consequences fall out of that choice, and they are the whole design:
 
 Their own security write-up is explicit that LinkedIn's page code carries an
 extension scanner with thousands of targets, a DOM "spectroscope", and a device
-fingerprint that travels with session requests — which is the stated reason they
+fingerprint that travels with session requests, which is the stated reason they
 are a desktop app driving a browser rather than an extension injecting into one.
 
 ## 2. The object model
@@ -76,12 +76,12 @@ event's attendee list, an alumni page, "who viewed your profile", your pending
 invites, or your full connections list), paginates it, and harvests profile URLs
 into the campaign queue. CSV import is the manual escape hatch.
 
-## 4. Safety model — pacing, not cloaking
+## 4. Safety model, pacing, not cloaking
 
 This is the part people misread. The safety features are about **not exceeding what
 a human plausibly does**, and they are what actually keeps an account alive:
 
-- **Rolling 24-hour caps per action type** (not calendar-day caps — a rolling
+- **Rolling 24-hour caps per action type** (not calendar-day caps, a rolling
   window, so you cannot dump a day's quota at 23:59 and another at 00:01).
 - **Working hours** with a randomized start time, so the account isn't active at
   03:00 and doesn't begin at exactly 09:00:00 every day.
@@ -95,14 +95,14 @@ a human plausibly does**, and they are what actually keeps an account alive:
 
 ## 5. Data extraction: DOM vs. Voyager
 
-LinkedIn's public DOM is deliberately hostile — obfuscated class names, no stable
+LinkedIn's public DOM is deliberately hostile, obfuscated class names, no stable
 semantic hooks. So for *reading* profile data, the reliable path is LinkedIn's own
 internal `/voyager/` API, called **from inside the logged-in page context** so it
 carries the session and CSRF token naturally.
 
 For *acting* (Connect, Message, Follow), the DOM path is more stable than Voyager
 because the buttons carry `aria-label`s that change far less often than
-LinkedIn's GraphQL query IDs — and clicking a button produces exactly the request
+LinkedIn's GraphQL query IDs, and clicking a button produces exactly the request
 sequence a human produces.
 
 **So: DOM-first for actions, page-context Voyager for reads.** That is the split
@@ -114,7 +114,7 @@ this clone implements.
 is a workflow action ("Send person to webhook") that POSTs a flat ~180-key profile
 object. Two traps, both learned the hard way:
 it fires for **every** person the step processes, not only ones matching the step's
-name; and `last_received_message_text` is *not* a reply signal — the real signal is
+name; and `last_received_message_text` is *not* a reply signal, the real signal is
 `is_last_message_incoming`.
 
 ---
@@ -127,7 +127,7 @@ name; and `last_received_message_text` is *not* a reply signal — the real sign
 | Workflow | GUI builder | JSON file (an LLM can author it) |
 | Storage | opaque local DB | SQLite you can query |
 | AI | fixed "AI message" / "AI ICP" features | any step can call an LLM; the model also gets a tool API to drive the whole engine |
-| Control | desktop GUI only | HTTP API + dashboard + MCP server |
+| Control | desktop GUI only | HTTP API + web UI + MCP server |
 
 Same architecture, open internals, and an agent-shaped control surface instead of a
 GUI. The engine is deliberately conservative in the same places Linked Helper is:
@@ -142,19 +142,19 @@ Pacing keeps an account healthy; cloaking is a different thing and isn't here.
 Automating LinkedIn violates the LinkedIn User Agreement regardless of how careful
 the pacing is. The realistic failure mode is a temporary restriction or a permanent
 ban on the account, and the ceiling on volume is set by LinkedIn's weekly invite cap,
-not by this software. Every commercial tool in this category — Linked Helper,
-Waalaxy, Dripify, Expandi — carries the same exposure. Run it on an account you can
+not by this software. Every commercial tool in this category, Linked Helper,
+Waalaxy, Dripify, Expandi, carries the same exposure. Run it on an account you can
 afford to lose, warm it up, and keep the caps low.
 
 ---
 
 ### Sources
 
-- [Linked Helper — product site](https://www.linkedhelper.com/) (action list, lead sources, integrations, credits)
-- [Linked Helper — LinkedIn automation limits](https://www.linkedhelper.com/blog/linkedin-automation-limits/)
-- [Linked Helper — how LinkedIn catches automation](https://www.linkedhelper.com/blog/linkedin-automation-security-study/)
-- [Linked Helper support — Workflow](https://support.linkedhelper.com/hc/en-us/articles/360016470720-Workflow) (queue ordering, delay vs. check-for-replies)
-- [Linked Helper support — Working hours and limits](https://support.linkedhelper.com/hc/en-us/articles/360016435499-Working-Hours-and-Limits)
-- [Skrapp — Linked Helper review](https://skrapp.io/blog/linked-helper/) (desktop app, plug-in architecture)
-- [Overloop — pricing, limits, ban risk](https://overloop.com/blog/linkedin-helper-review)
-- [Iron Mind — Voyager API scraper writeup](https://iron-mind.ai/blog/linkedin-profile-scraper-python-voyager-api) (DOM vs. Voyager, obfuscated classes)
+- [Linked Helper, product site](https://www.linkedhelper.com/) (action list, lead sources, integrations, credits)
+- [Linked Helper, LinkedIn automation limits](https://www.linkedhelper.com/blog/linkedin-automation-limits/)
+- [Linked Helper, how LinkedIn catches automation](https://www.linkedhelper.com/blog/linkedin-automation-security-study/)
+- [Linked Helper support, Workflow](https://support.linkedhelper.com/hc/en-us/articles/360016470720-Workflow) (queue ordering, delay vs. check-for-replies)
+- [Linked Helper support, Working hours and limits](https://support.linkedhelper.com/hc/en-us/articles/360016435499-Working-Hours-and-Limits)
+- [Skrapp, Linked Helper review](https://skrapp.io/blog/linked-helper/) (desktop app, plug-in architecture)
+- [Overloop, pricing, limits, ban risk](https://overloop.com/blog/linkedin-helper-review)
+- [Iron Mind, Voyager API scraper writeup](https://iron-mind.ai/blog/linkedin-profile-scraper-python-voyager-api) (DOM vs. Voyager, obfuscated classes)

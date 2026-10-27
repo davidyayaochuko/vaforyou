@@ -11,7 +11,6 @@ import { ensureConversations } from '../va/conversations.ts';
 import { ensureKbTable, loadKnowledgeFiles } from '../va/knowledge.ts';
 import { ensureAlertsTable } from '../va/alerts.ts';
 import { ensureVocabTable } from '../voice/vocab.ts';
-import { env } from '../config/env.ts';
 
 initSchema();
 ensureVaTables();
@@ -30,15 +29,15 @@ startReminderLoop();
 
 // The social engine does not auto-start. You press the button (or POST /api/engine/start).
 // Reminder email loop starts with the server so Ask-box reminders still fire.
-console.log('Social engine is stopped. Start it from the dashboard when you are ready.');
-console.log(`Reminder loop is running. Ask box: http://${env.bindHost}:${env.port}`);
+console.log('Social engine is stopped. Start it from Settings in the UI when you are ready.');
+console.log('Reminder loop is running.');
 
 let shuttingDown = false;
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.on(sig, async () => {
     if (shuttingDown) process.exit(1);
     shuttingDown = true;
-    console.log(`\n${sig} — finishing the current action, then closing the browser…`);
+    console.log(`\n${sig}: finishing the current action, then closing the browser…`);
     stopReminderLoop();
     await engine.stop();
     await closeAllSessions();

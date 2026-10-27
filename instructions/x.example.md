@@ -7,7 +7,7 @@ builders, and they can smell marketing at a distance.
 
 ## Shape
 
-280 characters, and assume no Premium — a post that needs more space needs to be a
+280 characters, and assume no Premium. A post that needs more space needs to be a
 thread, not a longer post. Threads are numbered `1/`, `2/` and split automatically;
 each part is capped at 280 on its own.
 

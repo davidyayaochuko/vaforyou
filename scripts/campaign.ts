@@ -32,4 +32,4 @@ if (checkOnly) {
 const result = loadWorkflow(doc);
 console.log(`\nloaded campaign #${result.campaign.id} "${result.campaign.name}" (${result.campaign.status})`);
 for (const s of result.steps) console.log(`  ${s.position}. ${s.action}`);
-console.log('\nAdd leads, then start it from the dashboard.');
+console.log('\nAdd leads, then start the engine from Settings in the UI.');

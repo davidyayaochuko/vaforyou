@@ -5,7 +5,7 @@
  *
  * It writes `.env`, generates the API token, takes one free Groq key and proves
  * it works, creates the database, and prints the exact login commands. Nothing
- * here touches a social account, and nothing types a credential — connecting an
+ * here touches a social account, and nothing types a credential, connecting an
  * account is still a browser window you log into yourself.
  *
  * Safe to re-run. Existing values in `.env` are never overwritten silently: the
@@ -39,7 +39,7 @@ const step = (n: number, label: string) => say(`\n${n}. ${label}`);
 // without this check is an import error three files deep.
 const [major = 0, minor = 0] = process.versions.node.split('.').map(Number);
 if (major < 22 || (major === 22 && minor < 5)) {
-  say(`\nnode ${process.versions.node} is too old — this needs 22.5 or newer (it uses the`);
+  say(`\nnode ${process.versions.node} is too old, this needs 22.5 or newer (it uses the`);
   say('built-in node:sqlite). Install it with `nvm install 22` or from nodejs.org.\n');
   rl.close();
   process.exit(1);
@@ -53,7 +53,7 @@ if (!existsSync(envPath)) {
   copyFileSync(examplePath, envPath);
   say('   created .env from .env.example');
 } else {
-  say('   .env already exists — keeping every value that is already set');
+  say('   .env already exists, keeping every value that is already set');
 }
 
 const original = readFileSync(envPath, 'utf8');
@@ -78,16 +78,16 @@ if (current('API_TOKEN')) {
   say('   already set, left alone');
 } else {
   next = set(next, 'API_TOKEN', randomBytes(24).toString('hex'));
-  say('   generated — the dashboard and every /api call require it');
+  say('   generated. The UI and every /api call require it');
 }
 
 // ── 3. The free AI key ───────────────────────────────────────────────────────
 step(3, 'AI key (free)');
 const existingGroq = current('GROQ_API_KEY');
 if (existingGroq) {
-  say(`   GROQ_API_KEY already set (${existingGroq.slice(0, 7)}…) — Enter keeps it`);
+  say(`   GROQ_API_KEY already set (${existingGroq.slice(0, 7)}…), Enter keeps it`);
 } else {
-  say('   Get one free at https://console.groq.com/keys — no card, about a minute.');
+  say('   Get one free at https://console.groq.com/keys, no card, about a minute.');
   say('   Leave blank to run the mock provider (everything works, but generated');
   say('   posts are always blocked, on purpose).');
 }
@@ -99,24 +99,24 @@ let model = current('GROQ_MODEL') || DEFAULT_GROQ_MODEL;
 if (groqKey) {
   // Validate against /models rather than a completion: it costs no tokens, and it
   // also tells us whether the configured model still exists. Groq retires model
-  // ids on its own schedule, and a stale one fails at first generation — hours
+  // ids on its own schedule, and a stale one fails at first generation, hours
   // after setup, in a scheduled job, where nobody is watching.
   const { fetchModelIds, pickChatModel } = await import('../src/ai/models.ts');
   const res = await fetchModelIds(groqKey);
 
   if (!res.ok) {
-    say(`   ${res.error} — key saved, verify later with \`npm run doctor\``);
+    say(`   ${res.error}, key saved, verify later with \`npm run doctor\``);
   } else {
     const picked = pickChatModel(res.ids, model);
     model = picked.model;
     say(picked.switched
-      ? `   key works. The configured model is gone from Groq — switching to ${model}`
+      ? `   key works. The configured model is gone from Groq, switching to ${model}`
       : `   key works, and ${model} is live`);
   }
   next = set(next, 'GROQ_API_KEY', groqKey);
   next = set(next, 'GROQ_MODEL', model);
 } else {
-  say('   no key — running the deterministic mock provider');
+  say('   no key, running the deterministic mock provider');
 }
 
 writeFileSync(envPath, next);
@@ -131,7 +131,7 @@ step(4, 'your brief and your templates');
 const { seedConfigFiles } = await import('../src/setup/seed.ts');
 const made = seedConfigFiles(root);
 say(made.length
-  ? `   created ${made.length} file(s) from the examples — edit them to sound like you:\n     ${made.join('\n     ')}`
+  ? `   created ${made.length} file(s) from the examples, edit them to sound like you:\n     ${made.join('\n     ')}`
   : '   already yours, left alone');
 
 step(5, 'database');
@@ -176,7 +176,7 @@ if (connected.some((a) => a.platform === 'linkedin')) {
     });
     launched = true;
   } else {
-    say('   skipped — run it yourself when you are ready:');
+    say('   skipped, run it yourself when you are ready:');
     say('     npm run login -- linkedin  --platform linkedin');
   }
 }
@@ -192,11 +192,12 @@ if (!launched) {
 say('\nThen:\n');
 say('   npm run doctor       # anything wrong? read-only, opens no browser');
 say('   npm run accounts     # what is connected, and today\'s budget');
-say(`   npm run start        # dashboard at http://localhost:${env.port}`);
-say('\nSchedule the first job — one post a day, published every two hours:\n');
+say('   npm run build        # build the UI once (and after every pull)');
+say(`   npm run start        # Funke at http://localhost:${env.port}`);
+say('\nSchedule the first job (one post a day, published every two hours):\n');
 say('   npm run schedule -- add linkedin generate_post --every 1d \\');
 say('     --brief "this week\'s real number or decision" --facts "..."');
 say('   npm run schedule -- add linkedin publish_due --every 2h');
-say('\nThe engine never auto-starts. You press the button.\n');
+say('\nThe engine never auto-starts. You press Start in Settings.\n');
 
 if (!launched) rl.close();

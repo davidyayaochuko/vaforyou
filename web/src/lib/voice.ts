@@ -196,7 +196,7 @@ class VoiceEngine {
   private outCtx: AudioContext | null = null;
   private speakSource: AudioBufferSourceNode | null = null;
   private ttsProvider: 'azure' | 'xai' | 'browser' | null = null;
-  /** When speaking started — grace period before barge-in can cut her off. */
+  /** When speaking started, grace period before barge-in can cut her off. */
   private speakingSince = 0;
   /** Bumped on cancel so in-flight sentence loops stop. */
   private speakToken = 0;
@@ -901,7 +901,7 @@ class VoiceEngine {
             });
           }
         }
-        // Server TTS returned empty — fall through to browser.
+        // Server TTS returned empty, fall through to browser.
         this.set({ notice: 'Server voice returned empty audio. Trying browser voice…' });
       }
       let spoken = text;
@@ -965,7 +965,7 @@ class VoiceEngine {
     if (ctx.state !== 'running') {
       throw new Error('Audio output is blocked. Tap Talk once, then speak again.');
     }
-    const copy = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    const copy = new Uint8Array(bytes).buffer;
     let decoded: AudioBuffer;
     try {
       decoded = await ctx.decodeAudioData(copy);
@@ -1011,7 +1011,7 @@ class VoiceEngine {
 
   private playViaElement(bytes: Uint8Array, mime: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+      const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: mime }));
       const audio = new Audio(url);
       audio.volume = 1;
       this.audio = audio;
