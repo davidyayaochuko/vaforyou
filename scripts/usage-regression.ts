@@ -70,6 +70,14 @@ async function main(): Promise<void> {
   );
 
   console.log('\n4. Knowledge grounding');
+  // Fixture lives in this test's database. A fresh clone has no private knowledge files.
+  const { upsertKbEntry } = await import('../src/va/knowledge.ts');
+  upsertKbEntry({
+    kind: 'faq',
+    question: 'What is the Starter plan price and Lagos delivery time?',
+    answer: 'Starter is NGN 45,000 per month. Lagos delivery is 5 to 7 days.',
+    tags: 'usage-regression',
+  });
   const price = groundedReply('What is the Starter pricing and Lagos delivery time?');
   check('pricing hits KB', price.handled && /45.?000|45000/i.test(price.reply), price.reply.slice(0, 200));
 
@@ -104,7 +112,7 @@ async function main(): Promise<void> {
   check('reply style persists', loadReplyStyle() === 'detailed');
   saveReplyStyle('brief');
 
-  console.log(failed ? `\nFAIL — ${failed} checks` : '\nPASS — usage regression');
+  console.log(failed ? `\nFAIL: ${failed} checks` : '\nPASS: usage regression');
   process.exit(failed ? 1 : 0);
 }
 
